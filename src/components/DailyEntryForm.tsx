@@ -28,6 +28,9 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   const [savingAll, setSavingAll] = useState(false);
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editFormData, setEditFormData] = useState<any>(null);
+
   const currentMonth = date.substring(0, 7);
 
   useEffect(() => {
@@ -126,32 +129,27 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     setSavingAll(false);
   };
 
-  const handleEditRecord = async (record: any) => {
-    const newDate = prompt("Ngày (Định dạng YYYY-MM-DD):", record.date);
-    if (!newDate) return;
-    const name = prompt("Tên hàng:", record.product_name);
-    if (!name) return;
-    const ckVal = prompt("Số tiền CK:", String(record.transfer));
-    const cashVal = prompt("Số tiền TM:", String(record.cash));
-    if (ckVal === null || cashVal === null) return;
-    
-    const ck = parseMoney(ckVal);
-    const tm = parseMoney(cashVal);
-    // Tính lại KT dựa trên số tiền mới
-    const { value: kt } = calcKT(ck, tm, record.accounting_amount);
+  const startEdit = (record: any) => {
+    setEditingId(record.id);
+    setEditFormData({ ...record });
+  };
 
-    const { error } = await supabase.from('daily_records').update({ 
-      date: newDate,
-      product_name: name, 
-      transfer: ck, 
-      cash: tm, 
-      accounting_amount: kt 
-    }).eq('id', record.id);
-    
+  const handleSaveEdit = async () => {
+    if (!editFormData) return;
+    const { value: kt } = calcKT(editFormData.transfer, editFormData.cash, editFormData.accounting_amount);
+    const { error } = await supabase.from('daily_records').update({
+      date: editFormData.date,
+      product_name: editFormData.product_name,
+      transfer: editFormData.transfer,
+      cash: editFormData.cash,
+      accounting_amount: kt
+    }).eq('id', editingId);
+
     if (!error) {
+      setEditingId(null);
       await loadMonthlyResults();
     } else {
-      alert("Lỗi khi sửa: " + error.message);
+      alert("Lỗi: " + error.message);
     }
   };
 
@@ -248,16 +246,41 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
             <tbody className="divide-y text-[11px]">
               {monthlyRecords.length === 0 ? (
                 <tr><td colSpan={isAdmin ? 6 : 5} className="text-center py-6 text-gray-400 italic">Chưa có dữ liệu</td></tr>
-              ) : monthlyRecords.map((r) => (
-                <tr key={r.id} className={`${selectedIds.includes(r.id) ? 'bg-red-50' : ''}`}>
-                  <td className="px-2 py-2"><input type="checkbox" checked={selectedIds.includes(r.id)} onChange={() => toggleSelect(r.id)} /></td>
-                  <td className="px-1 py-2 text-gray-400 text-[9px]">{new Date(r.date + 'T00:00:00').toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</td>
-                  <td className="px-2 py-2 font-medium text-gray-700 truncate max-w-[70px]">{r.product_name}</td>
-                  <td className="px-2 py-2 text-right">{fmt(r.transfer)}</td>
-                  <td className="px-2 py-2 text-right font-bold text-green-700">{fmt(r.accounting_amount)}</td>
-                  {isAdmin && <td className="px-2 py-2 text-center"><button onClick={() => handleEditRecord(r)}>✏️</button></td>}
-                </tr>
-              ))}
+              ) : monthlyRecords.map((r) => {
+                const isEditing = editingId === r.id;
+                return (
+                  <tr key={r.id} className={`${selectedIds.includes(r.id) ? 'bg-red-50' : ''} ${isEditing ? 'bg-blue-50' : ''}`}>
+                    <td className="px-2 py-2">
+                       {!isEditing && <input type="checkbox" checked={selectedIds.includes(r.id)} onChange={() => toggleSelect(r.id)} />}
+                    </td>
+                    
+                    {isEditing ? (
+                      <>
+                        <td className="px-1 py-1"><input type="text" value={editFormData.date} onChange={e => setEditFormData({...editFormData, date: e.target.value})} className="w-full border rounded px-1 py-1 text-[9px]" /></td>
+                        <td className="px-1 py-1"><input type="text" value={editFormData.product_name} onChange={e => setEditFormData({...editFormData, product_name: e.target.value})} className="w-full border rounded px-1 py-1 font-bold" /></td>
+                        <td className="px-1 py-1"><input type="text" value={fmt(editFormData.transfer)} onChange={e => setEditFormData({...editFormData, transfer: parseMoney(e.target.value)})} className="w-full border rounded px-1 py-1 text-right" /></td>
+                        <td className="px-1 py-1 text-right font-bold text-green-600">Auto</td>
+                        <td className="px-1 py-1 text-center flex gap-1 justify-center py-2">
+                           <button onClick={handleSaveEdit} className="text-lg">✅</button>
+                           <button onClick={() => setEditingId(null)} className="text-lg">❌</button>
+                        </td>
+                      </>
+                    ) : (
+                      <>
+                        <td className="px-1 py-2 text-gray-400 text-[9px]">{new Date(r.date + 'T00:00:00').toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</td>
+                        <td className="px-2 py-2 font-medium text-gray-700 truncate max-w-[70px]">{r.product_name}</td>
+                        <td className="px-2 py-2 text-right">{fmt(r.transfer)}</td>
+                        <td className="px-2 py-2 text-right font-bold text-green-700">{fmt(r.accounting_amount)}</td>
+                        {isAdmin && (
+                          <td className="px-2 py-2 text-center">
+                            <button onClick={() => startEdit(r)}>✏️</button>
+                          </td>
+                        )}
+                      </>
+                    )}
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
