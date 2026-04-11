@@ -73,6 +73,24 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
     }
   };
 
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appUser?.shop_id) return;
+    setLoading(true);
+
+    const res = await createUserWithRole(newUserEmail, newUserPass, newUserRole, appUser.shop_id);
+    
+    if (res.error) {
+      alert('Lỗi tạo user: ' + res.error);
+    } else {
+      alert('Đã tạo user thành công!');
+      setNewUserEmail('');
+      setNewUserPass('');
+      fetchUsers();
+    }
+    setLoading(false);
+  };
+
   const formatCurrency = (val: number) => {
     if (!val) return '';
     return new Intl.NumberFormat('vi-VN').format(val);
