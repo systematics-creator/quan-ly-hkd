@@ -1,0 +1,50 @@
+Hướng dẫn Triển khai SaaS Quản lý Hộ Kinh Doanh (HKD)
+Ứng dụng của bạn đã được thiết kế hoàn thiện về mặt frontend và kết nối cơ bản với Supabase!
+
+Để hoàn thiện dự án, vui lòng làm theo các bước dưới đây để kết nối với Supabase, Github và Vercel.
+
+1. Kết nối Supabase (Database & Authentication)
+Bước 1.1: Tạo dự án
+Đăng nhập vào Supabase và tạo một dự án mới.
+Lưu lại Project URL và Anon Key trong phần Settings -> API.
+Mở file .env.local ở thư mục gốc của dự án Quan-ly-HKD và cập nhật thông tin:
+env
+NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
+NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
+
+Bước 1.2: Thiết lập Database Schema & RLS
+Truy cập vào SQL Editor trong dự án Supabase.
+Copy toàn bộ nội dung từ file supabase_schema.sql (nằm trong thư mục dự án) và dán vào SQL Editor.
+Nhấn Run để khởi tạo cấu trúc bảng, RLS (Row Level Security), và các Policies phân quyền an toàn.
+
+Bước 1.3: Cấu hình Authentication
+Truy cập Authentication -> Providers.
+Đảm bảo Email đã được bật. Nếu chưa cần xác thực email gấp, bạn có thể tắt "Confirm email" (Tùy chọn).
+Đăng ký tài khoản Super Admin đầu tiên qua giao diện Supabase hoặc web và sau đó vào bảng users cấp quyền role = 'admin' thủ công.
+
+2. Kết nối Github (Lưu trữ mã nguồn)
+Mã nguồn đã được khởi tạo Git. Để đưa lên Github:
+
+Đăng nhập Github.com và tạo một Repository rỗng mới (Vd: quan-ly-hkd).
+Mở Terminal tại thư mục Quan-ly-HKD, chạy lần lượt:
+bash
+git add .
+git commit -m "Initial commit for SaaS app"
+git branch -M main
+git remote add origin https://github.com/TênCủaBạn/quan-ly-hkd.git
+git push -u origin main
+3. Hoàn tất Deploy lên Vercel
+Đăng nhập vào Vercel bằng tài khoản Github của bạn.
+Nhấn Add New Project.
+Import Repository quan-ly-hkd bạn vừa tạo.
+Ở phần Environment Variables, hãy thêm 2 biến môi trường bạn đã có ở file .env.local:
+NEXT_PUBLIC_SUPABASE_URL = <url_của_bạn>
+NEXT_PUBLIC_SUPABASE_ANON_KEY = <key_của_bạn>
+Nhấn Deploy.
+Sau vài phút, Vercel sẽ cấp cho bạn một đường dẫn (URL) để truy cập ứng dụng SaaS.
+
+Các tính năng đã được xây dựng trong code:
+Tenant Isolation: Dữ liệu được tách biệt bởi shop_id qua RLS. Users chỉ đọc và thao tác được trên ID shop của họ.
+Role-based UI: Giao diện tự động thích ứng với các quyền admin, manager, user.
+Payment / Expiration Limit: Màn hình Block Screen sẽ khóa các shop có ngày expire_at bị quá hạn.
+Auto Business Logic: Form nhập liệu Daily Input tự động validate ngưỡng accounting_amount dựa trên Cấu Hình (shop_settings).
