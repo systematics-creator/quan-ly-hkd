@@ -12,6 +12,11 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
   const [maxKt, setMaxKt] = useState(0);
   const [yearlyLimit, setYearlyLimit] = useState(0);
   const [shopName, setShopName] = useState('');
+  
+  const [raMin, setRaMin] = useState(1800000);
+  const [raMax, setRaMax] = useState(2300000);
+  const [rbMin, setRbMin] = useState(2300000);
+  const [rbMax, setRbMax] = useState(3400000);
 
   const [users, setUsers] = useState<any[]>([]);
   const [newUserEmail, setNewUserEmail] = useState('');
@@ -24,6 +29,10 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
       setMinKt(settings.min_kt || 0);
       setMaxKt(settings.max_kt || 0);
       setYearlyLimit(settings.yearly_kt_limit || 0);
+      setRaMin(settings.range_a_min || 1800000);
+      setRaMax(settings.range_a_max || 2300000);
+      setRbMin(settings.range_b_min || 2300000);
+      setRbMax(settings.range_b_max || 3400000);
     }
     if (shop) {
       setShopName(shop.name || '');
@@ -42,12 +51,21 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
     if (!appUser?.shop_id) return;
     try {
       await supabase.from('shops').update({ name: shopName }).eq('id', appUser.shop_id);
+      const payload = { 
+        min_kt: minKt, 
+        max_kt: maxKt, 
+        yearly_kt_limit: yearlyLimit,
+        range_a_min: raMin,
+        range_a_max: raMax,
+        range_b_min: rbMin,
+        range_b_max: rbMax
+      };
       if (settings?.id) {
-        await supabase.from('shop_settings').update({ min_kt: minKt, max_kt: maxKt, yearly_kt_limit: yearlyLimit }).eq('id', settings.id);
+        await supabase.from('shop_settings').update(payload).eq('id', settings.id);
       } else {
-        await supabase.from('shop_settings').insert({ shop_id: appUser.shop_id, min_kt: minKt, max_kt: maxKt, yearly_kt_limit: yearlyLimit });
+        await supabase.from('shop_settings').insert({ shop_id: appUser.shop_id, ...payload });
       }
-      alert('Lưu thành công!');
+      alert('Lưu cấu hình thành công!');
       onSettingsUpdated();
     } catch (err: any) { alert(err.message); }
   };
@@ -81,28 +99,8 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
       {/* 1. Cấu Hình Shop */}
       <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
         <h2 className="text-base font-bold mb-2 text-blue-800">Thiết Lập Cửa Hàng</h2>
-
-        {(settings?.min_kt || settings?.max_kt || settings?.yearly_kt_limit) && (
-          <div className="mb-3 rounded-md bg-blue-50/50 border border-blue-100 p-2">
-            <h3 className="text-[10px] font-bold text-blue-700 mb-1.5 uppercase px-1">Cấu hình hiện tại</h3>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-              <div className="bg-white rounded border border-blue-50 p-1.5 text-center">
-                <div className="text-[9px] text-gray-400">Min KT</div>
-                <div className="font-bold text-blue-700 text-sm">{formatCurrencyDisplay(settings.min_kt)}</div>
-              </div>
-              <div className="bg-white rounded border border-blue-50 p-1.5 text-center">
-                <div className="text-[9px] text-gray-400">Max KT</div>
-                <div className="font-bold text-blue-700 text-sm">{formatCurrencyDisplay(settings.max_kt)}</div>
-              </div>
-              <div className="bg-white rounded border border-red-50 p-1.5 text-center col-span-2 sm:col-span-1">
-                <div className="text-[9px] text-red-500">Năm (÷12)</div>
-                <div className="font-bold text-red-600 text-sm">{formatCurrencyDisplay(settings.yearly_kt_limit)}</div>
-              </div>
-            </div>
-          </div>
-        )}
         
-        <form onSubmit={handleSaveSettings} className="space-y-2.5">
+        <form onSubmit={handleSaveSettings} className="space-y-3 pt-2">
           <div>
             <label className="block text-[10px] font-bold mb-0.5 text-gray-400 uppercase">Tên Cửa Hàng</label>
             <input 
@@ -110,29 +108,50 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
               className="border border-gray-200 p-2 rounded-md w-full font-bold text-sm outline-none"
             />
           </div>
+
+          <div className="p-3 bg-red-50 rounded-lg border border-red-100 space-y-3">
+             <div className="font-bold text-red-600 uppercase text-[10px]">Cấu hình Mục tiêu & Auto KT</div>
+             
+             <div>
+               <label className="block text-[9px] font-bold text-gray-500 mb-0.5">MỤC TIÊU NĂM (Đ)</label>
+               <input 
+                 type="text" required value={formatCurrency(yearlyLimit)} onChange={handleCurrencyInput(setYearlyLimit)}
+                 className="border border-red-200 p-2 rounded-md w-full font-bold text-red-700 text-sm"
+               />
+               <div className="text-[9px] text-red-400 mt-1 italic">Tương đương: {formatCurrency(Math.round(yearlyLimit/12))}đ / tháng</div>
+             </div>
+
+             <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                   <div className="text-[9px] font-black text-gray-400">KHOẢNG A (CK &lt; 1.5M)</div>
+                   <input type="text" value={formatCurrency(raMin)} onChange={handleCurrencyInput(setRaMin)} className="border p-2 rounded w-full text-xs" placeholder="Min A" />
+                   <input type="text" value={formatCurrency(raMax)} onChange={handleCurrencyInput(setRaMax)} className="border p-2 rounded w-full text-xs" placeholder="Max A" />
+                </div>
+                <div className="space-y-2">
+                   <div className="text-[9px] font-black text-gray-400">KHOẢNG B (CK &ge; 1.5M)</div>
+                   <input type="text" value={formatCurrency(rbMin)} onChange={handleCurrencyInput(setRbMin)} className="border p-2 rounded w-full text-xs" placeholder="Min B" />
+                   <input type="text" value={formatCurrency(rbMax)} onChange={handleCurrencyInput(setRbMax)} className="border p-2 rounded w-full text-xs" placeholder="Max B" />
+                </div>
+             </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-2">
             <div>
-              <label className="block text-[10px] font-bold mb-0.5 text-gray-400 uppercase">Min KT (đ)</label>
+              <label className="block text-[10px] font-bold mb-0.5 text-gray-400 uppercase">Min KT Chung (đ)</label>
               <input 
                 type="text" value={formatCurrency(minKt)} onChange={handleCurrencyInput(setMinKt)}
                 className="border border-gray-200 p-2 rounded-md w-full text-sm outline-none"
               />
             </div>
             <div>
-              <label className="block text-[10px] font-bold mb-0.5 text-gray-400 uppercase">Max KT (đ)</label>
+              <label className="block text-[10px] font-bold mb-0.5 text-gray-400 uppercase">Max KT Chung (đ)</label>
               <input 
                 type="text" value={formatCurrency(maxKt)} onChange={handleCurrencyInput(setMaxKt)}
                 className="border border-gray-200 p-2 rounded-md w-full text-sm outline-none"
               />
             </div>
           </div>
-          <div>
-            <label className="block text-[10px] font-bold mb-0.5 text-red-500 uppercase">KT Năm (đ)</label>
-            <input 
-              type="text" required value={formatCurrency(yearlyLimit)} onChange={handleCurrencyInput(setYearlyLimit)}
-              className="border border-red-100 bg-red-50 p-2 rounded-md w-full font-bold text-red-600 text-sm outline-none"
-            />
-          </div>
+          
           <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-md font-bold text-sm active:scale-95 shadow-sm">
             Cập nhật cấu hình
           </button>
