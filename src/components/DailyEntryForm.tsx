@@ -239,6 +239,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                 <th className="px-1 py-2">Ngày</th>
                 <th className="px-2 py-2">Hàng</th>
                 <th className="px-2 py-2 text-right">CK</th>
+                <th className="px-2 py-2 text-right">TM</th>
                 <th className="px-2 py-2 text-right text-green-600">KT</th>
                 {isAdmin && <th className="px-2 py-2 text-center">Sửa</th>}
               </tr>
@@ -292,6 +293,16 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                             />
                           </div>
 
+                          <div>
+                            <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1">Tiền mặt (TM)</label>
+                            <input 
+                              type="text" 
+                              value={fmt(editFormData.cash)} 
+                              onChange={e => setEditFormData({...editFormData, cash: parseMoney(e.target.value)})} 
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-blue-500 font-bold text-right" 
+                            />
+                          </div>
+
                           <div className="flex gap-2 pt-1">
                             <button onClick={handleSaveEdit} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold text-sm shadow-md active:scale-95">LƯU THAY ĐỔI</button>
                             <button onClick={() => setEditingId(null)} className="flex-1 bg-gray-200 text-gray-600 py-2 rounded-lg font-bold text-sm active:scale-95">HỦY</button>
@@ -303,6 +314,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                         <td className="px-1 py-2 text-gray-400 text-[9px]">{new Date(r.date + 'T00:00:00').toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</td>
                         <td className="px-2 py-2 font-medium text-gray-700 truncate max-w-[70px]">{r.product_name}</td>
                         <td className="px-2 py-2 text-right">{fmt(r.transfer)}</td>
+                        <td className="px-2 py-2 text-right">{fmt(r.cash)}</td>
                         <td className="px-2 py-2 text-right font-bold text-green-700">{fmt(r.accounting_amount)}</td>
                         {isAdmin && (
                           <td className="px-2 py-2 text-center">
