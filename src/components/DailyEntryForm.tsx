@@ -4,26 +4,27 @@ import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
 
-type Record = {
+type Row = {
   id?: string;
   product_name: string;
   cash: number;
   transfer: number;
   accounting_amount: number;
-  date?: string;
   isNew?: boolean;
 };
+
+const fmt = (val: number) =>
+  new Intl.NumberFormat('vi-VN').format(Math.round(val || 0));
 
 export default function DailyEntryForm({ settings }: { settings: any }) {
   const { appUser } = useAuth();
   const today = new Date().toISOString().split('T')[0];
   const [date, setDate] = useState(today);
-  const [inputRows, setInputRows] = useState<Record[]>([]);
+  const [inputRows, setInputRows] = useState<Row[]>([]);
   const [monthlyRecords, setMonthlyRecords] = useState<any[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [newProductName, setNewProductName] = useState('');
-
-  const currentMonth = date.substring(0, 7); // YYYY-MM
+  const [saving, setSaving] = useState<number | null>(null);
+  const [savingAll, setSavingAll] = useState(false);
+  const currentMonth = date.substring(0, 7);
 
   useEffect(() => {
     if (appUser?.shop_id) {
@@ -32,332 +33,272 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     }
   }, [appUser, date]);
 
-  // Load input rows: today's existing records OR previous day's product list
   const loadTodayRows = async () => {
     if (!appUser?.shop_id) return;
-
-    // 1. Check if today already has records
     const { data: todayData } = await supabase
-      .from('daily_records')
-      .select('*')
-      .eq('shop_id', appUser.shop_id)
-      .eq('date', date);
+      .from('daily_records').select('*')
+      .eq('shop_id', appUser.shop_id).eq('date', date);
 
     if (todayData && todayData.length > 0) {
       setInputRows(todayData.map(r => ({ ...r })));
       return;
     }
-
-    // 2. If not, get the most recent day's product names to auto-fill
     const { data: recentData } = await supabase
-      .from('daily_records')
-      .select('product_name, date')
-      .eq('shop_id', appUser.shop_id)
-      .lt('date', date)
-      .order('date', { ascending: false })
-      .limit(20);
+      .from('daily_records').select('product_name, date')
+      .eq('shop_id', appUser.shop_id).lt('date', date)
+      .order('date', { ascending: false }).limit(20);
 
     if (recentData && recentData.length > 0) {
-      // Get the latest date
       const latestDate = recentData[0].date;
-      const products = recentData
-        .filter(r => r.date === latestDate)
-        .map(r => r.product_name);
-      const unique = Array.from(new Set(products));
-      setInputRows(unique.map(p => ({
-        product_name: p,
-        cash: 0,
-        transfer: 0,
-        accounting_amount: 0,
-        isNew: true
+      const products = recentData.filter(r => r.date === latestDate).map(r => r.product_name);
+      setInputRows(Array.from(new Set(products)).map(p => ({
+        product_name: p, cash: 0, transfer: 0, accounting_amount: 0, isNew: true
       })));
     } else {
-      // Brand new — give 1 empty row
       setInputRows([{ product_name: '', cash: 0, transfer: 0, accounting_amount: 0, isNew: true }]);
     }
   };
 
-  // Load all records for current month, sorted newest first
   const loadMonthlyResults = async () => {
     if (!appUser?.shop_id) return;
-    const startOfMonth = currentMonth + '-01';
     const { data } = await supabase
-      .from('daily_records')
-      .select('*')
+      .from('daily_records').select('*')
       .eq('shop_id', appUser.shop_id)
-      .gte('date', startOfMonth)
+      .gte('date', currentMonth + '-01')
       .order('date', { ascending: false })
       .order('product_name', { ascending: true });
     if (data) setMonthlyRecords(data);
   };
 
-  // Auto-calculate KT: >= (transfer + cash), within [min_kt, max_kt]
-  const calculateAutoKT = (transfer: number, cash: number): { value: number; warning: string } => {
+  const calcKT = (transfer: number, cash: number) => {
     const base = transfer + cash;
     const min = settings?.min_kt || 0;
     const max = settings?.max_kt || Infinity;
-
-    if (!settings) return { value: base, warning: '' };
-
-    if (base > max) {
-      return { value: max, warning: `⚠️ Tổng (TM+CK) vượt mức tối đa ${formatCurrency(max)}đ` };
-    }
-    const kt = Math.max(base, min);
-    return { value: kt, warning: '' };
+    if (base > max) return { value: max, warn: `Tổng vượt mức tối đa ${fmt(max)}đ` };
+    return { value: Math.max(base, min), warn: '' };
   };
 
-  const handleSaveRow = async (index: number) => {
+  const doSave = async (index: number) => {
     const rec = inputRows[index];
-    if (!rec.product_name.trim()) {
-      alert('Vui lòng nhập tên hàng hóa!');
-      return;
-    }
-    if (!appUser?.shop_id) return;
-    setSaving(true);
-
-    const { value: kt, warning } = calculateAutoKT(rec.transfer, rec.cash);
-
+    if (!rec.product_name.trim()) { alert('Nhập tên hàng hóa!'); return; }
+    setSaving(index);
+    const { value: kt, warn } = calcKT(rec.transfer, rec.cash);
     if (rec.id) {
-      await supabase.from('daily_records').update({
-        cash: rec.cash,
-        transfer: rec.transfer,
-        accounting_amount: kt
-      }).eq('id', rec.id);
+      await supabase.from('daily_records').update({ cash: rec.cash, transfer: rec.transfer, accounting_amount: kt }).eq('id', rec.id);
     } else {
-      const { data: inserted } = await supabase.from('daily_records').insert({
-        shop_id: appUser.shop_id,
-        date,
-        product_name: rec.product_name,
-        cash: rec.cash,
-        transfer: rec.transfer,
-        accounting_amount: kt
+      const { data: ins } = await supabase.from('daily_records').insert({
+        shop_id: appUser?.shop_id, date, product_name: rec.product_name,
+        cash: rec.cash, transfer: rec.transfer, accounting_amount: kt
       }).select().single();
-
-      if (inserted) {
-        const newRows = [...inputRows];
-        newRows[index] = { ...inserted };
-        setInputRows(newRows);
+      if (ins) {
+        const nr = [...inputRows]; nr[index] = { ...ins }; setInputRows(nr);
       }
     }
-
-    if (warning) alert(warning);
+    if (warn) alert(warn);
     await loadMonthlyResults();
-    setSaving(false);
+    setSaving(null);
   };
 
-  const handleSaveAll = async () => {
-    if (!appUser?.shop_id) return;
-    setSaving(true);
+  const doSaveAll = async () => {
+    setSavingAll(true);
     for (let i = 0; i < inputRows.length; i++) {
       const rec = inputRows[i];
       if (!rec.product_name.trim()) continue;
-      const { value: kt } = calculateAutoKT(rec.transfer, rec.cash);
+      const { value: kt } = calcKT(rec.transfer, rec.cash);
       if (rec.id) {
-        await supabase.from('daily_records').update({
-          cash: rec.cash, transfer: rec.transfer, accounting_amount: kt
-        }).eq('id', rec.id);
+        await supabase.from('daily_records').update({ cash: rec.cash, transfer: rec.transfer, accounting_amount: kt }).eq('id', rec.id);
       } else {
         await supabase.from('daily_records').insert({
-          shop_id: appUser.shop_id, date, product_name: rec.product_name,
+          shop_id: appUser?.shop_id, date, product_name: rec.product_name,
           cash: rec.cash, transfer: rec.transfer, accounting_amount: kt
         });
       }
     }
     await loadTodayRows();
     await loadMonthlyResults();
-    setSaving(false);
+    setSavingAll(false);
   };
 
-  const addEmptyRow = () => {
+  const updateRow = (index: number, field: keyof Row, val: any) => {
+    const nr = [...inputRows]; (nr[index] as any)[field] = val; setInputRows(nr);
+  };
+
+  const parseMoney = (v: string) => Number(v.replace(/[^0-9]/g, ''));
+
+  const addEmptyRow = () =>
     setInputRows([...inputRows, { product_name: '', cash: 0, transfer: 0, accounting_amount: 0, isNew: true }]);
-  };
 
-  const formatCurrency = (val: number) => {
-    if (!val && val !== 0) return '0';
-    return new Intl.NumberFormat('vi-VN').format(Math.round(val));
-  };
-
-  const handleCurrencyInput = (index: number, field: 'transfer' | 'cash') => (e: React.ChangeEvent<HTMLInputElement>) => {
-    const rawValue = e.target.value.replace(/[^0-9]/g, '');
-    const newRows = [...inputRows];
-    newRows[index][field] = Number(rawValue);
-    setInputRows(newRows);
-  };
-
-  const handleNameChange = (index: number, val: string) => {
-    const newRows = [...inputRows];
-    newRows[index].product_name = val;
-    setInputRows(newRows);
-  };
-
-  // Group monthly records by date for display
-  const groupedByDate = monthlyRecords.reduce((acc: any, rec: any) => {
-    if (!acc[rec.date]) acc[rec.date] = [];
-    acc[rec.date].push(rec);
-    return acc;
-  }, {});
-
-  const sortedDates = Object.keys(groupedByDate).sort((a, b) => b.localeCompare(a));
-
+  // Monthly grouped
+  const grouped: Record<string, any[]> = {};
+  for (const r of monthlyRecords) { if (!grouped[r.date]) grouped[r.date] = []; grouped[r.date].push(r); }
+  const sortedDates = Object.keys(grouped).sort((a, b) => b.localeCompare(a));
   const monthTotalKT = monthlyRecords.reduce((s, r) => s + (r.accounting_amount || 0), 0);
-  const yearlyTarget = settings?.yearly_kt_limit || 0;
-  const monthTarget = yearlyTarget > 0 ? yearlyTarget / 12 : 0;
+  const monthTarget = settings?.yearly_kt_limit ? settings.yearly_kt_limit / 12 : 0;
+  const pct = monthTarget > 0 ? Math.min((monthTotalKT / monthTarget) * 100, 100) : 0;
 
   return (
-    <div className="space-y-6">
-      {/* === INPUT SECTION === */}
-      <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-        <div className="flex flex-wrap justify-between items-center mb-5 gap-3">
-          <h2 className="text-xl font-bold">Nhập Liệu Hàng Ngày</h2>
-          <div className="flex items-center gap-3">
-            <label className="text-sm text-gray-500">Ngày:</label>
-            <input
-              type="date"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              className="border p-2 rounded-lg font-medium bg-gray-50 text-sm"
-            />
-          </div>
+    <div className="space-y-5">
+
+      {/* ===== INPUT SECTION ===== */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-4 py-3 flex justify-between items-center">
+          <h2 className="text-white font-bold text-base">📝 Nhập Liệu Hàng Ngày</h2>
+          <input
+            type="date" value={date}
+            onChange={e => setDate(e.target.value)}
+            className="text-sm bg-white/20 text-white rounded-lg px-2 py-1 border border-white/30 focus:outline-none"
+          />
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[600px]">
-            <thead>
-              <tr className="bg-blue-50 border-b-2 border-blue-100">
-                <th className="p-3 text-sm font-semibold text-gray-700">Nhập Hàng Hóa Hôm Nay</th>
-                <th className="p-3 text-sm font-semibold text-gray-700 text-right">Tiền Chuyển Khoản</th>
-                <th className="p-3 text-sm font-semibold text-gray-700 text-right">Tiền Mặt</th>
-                <th className="p-3 text-sm font-semibold text-green-700 text-right">Số Tiền (Mẫu KT)</th>
-                <th className="p-3 text-sm font-semibold text-gray-700 text-center">Lưu</th>
-              </tr>
-            </thead>
-            <tbody>
-              {inputRows.map((rec, index) => {
-                const { value: ktValue } = calculateAutoKT(rec.transfer, rec.cash);
-                return (
-                  <tr key={index} className="border-b hover:bg-gray-50 transition-colors">
-                    <td className="p-2">
+        <div className="p-4 space-y-3">
+          {inputRows.map((rec, i) => {
+            const { value: kt } = calcKT(rec.transfer, rec.cash);
+            const isSavingThis = saving === i;
+            return (
+              <div key={i} className="rounded-xl border border-gray-200 overflow-hidden">
+                {/* Product name row */}
+                <div className="bg-gray-50 px-3 py-2 border-b border-gray-100">
+                  <input
+                    type="text"
+                    value={rec.product_name}
+                    onChange={e => updateRow(i, 'product_name', e.target.value)}
+                    placeholder="Tên hàng hóa..."
+                    disabled={!!rec.id}
+                    className="w-full bg-transparent font-semibold text-gray-800 text-sm focus:outline-none disabled:text-gray-600"
+                  />
+                </div>
+                {/* Money inputs */}
+                <div className="grid grid-cols-2 divide-x divide-gray-100">
+                  <div className="p-3">
+                    <label className="text-xs text-gray-400 block mb-1">Tiền Chuyển Khoản</label>
+                    <div className="flex items-center gap-1">
                       <input
                         type="text"
-                        value={rec.product_name}
-                        onChange={e => handleNameChange(index, e.target.value)}
-                        placeholder="Tên hàng hóa..."
-                        className="border p-2 rounded w-full text-sm"
-                        disabled={!!rec.id}
+                        inputMode="numeric"
+                        value={fmt(rec.transfer)}
+                        onChange={e => updateRow(i, 'transfer', parseMoney(e.target.value))}
+                        className="w-full text-right font-bold text-gray-800 text-base focus:outline-none"
                       />
-                    </td>
-                    <td className="p-2">
-                      <div className="relative">
-                        <input type="text" className="border w-full p-2 pr-7 rounded text-right text-sm"
-                          value={formatCurrency(rec.transfer)}
-                          onChange={handleCurrencyInput(index, 'transfer')} />
-                        <span className="absolute right-2 top-2.5 text-gray-400 text-xs">đ</span>
-                      </div>
-                    </td>
-                    <td className="p-2">
-                      <div className="relative">
-                        <input type="text" className="border w-full p-2 pr-7 rounded text-right text-sm"
-                          value={formatCurrency(rec.cash)}
-                          onChange={handleCurrencyInput(index, 'cash')} />
-                        <span className="absolute right-2 top-2.5 text-gray-400 text-xs">đ</span>
-                      </div>
-                    </td>
-                    <td className="p-2">
-                      <div className="relative">
-                        <input type="text" disabled
-                          className="border w-full p-2 pr-7 rounded bg-green-50 text-green-700 font-bold text-right text-sm"
-                          value={formatCurrency(ktValue)} />
-                        <span className="absolute right-2 top-2.5 text-green-500 text-xs">đ</span>
-                      </div>
-                    </td>
-                    <td className="p-2 text-center">
-                      <button onClick={() => handleSaveRow(index)} disabled={saving}
-                        className="bg-blue-600 text-white px-3 py-2 rounded text-sm font-medium hover:bg-blue-700 disabled:opacity-50 whitespace-nowrap">
-                        Lưu
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                      <span className="text-gray-400 text-xs shrink-0">đ</span>
+                    </div>
+                  </div>
+                  <div className="p-3">
+                    <label className="text-xs text-gray-400 block mb-1">Tiền Mặt</label>
+                    <div className="flex items-center gap-1">
+                      <input
+                        type="text"
+                        inputMode="numeric"
+                        value={fmt(rec.cash)}
+                        onChange={e => updateRow(i, 'cash', parseMoney(e.target.value))}
+                        className="w-full text-right font-bold text-gray-800 text-base focus:outline-none"
+                      />
+                      <span className="text-gray-400 text-xs shrink-0">đ</span>
+                    </div>
+                  </div>
+                </div>
+                {/* KT + Save row */}
+                <div className="bg-green-50 border-t border-green-100 px-3 py-2 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs text-green-600">Mẫu KT (tự động)</span>
+                    <div className="font-bold text-green-700 text-lg">{fmt(kt)}<span className="text-xs font-normal ml-1">đ</span></div>
+                  </div>
+                  <button
+                    onClick={() => doSave(i)}
+                    disabled={isSavingThis}
+                    className="bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-bold active:bg-blue-700 disabled:opacity-50"
+                  >
+                    {isSavingThis ? '...' : '💾 Lưu'}
+                  </button>
+                </div>
+              </div>
+            );
+          })}
 
-        <div className="flex gap-3 mt-4">
-          <button onClick={addEmptyRow}
-            className="border border-blue-300 text-blue-600 px-4 py-2 rounded text-sm hover:bg-blue-50">
-            + Thêm dòng hàng hóa
-          </button>
-          <button onClick={handleSaveAll} disabled={saving}
-            className="bg-blue-600 text-white px-5 py-2 rounded text-sm font-semibold hover:bg-blue-700 disabled:opacity-50">
-            {saving ? 'Đang lưu...' : '💾 Lưu Tất Cả'}
-          </button>
+          {/* Bottom actions */}
+          <div className="flex gap-2 pt-1">
+            <button
+              onClick={addEmptyRow}
+              className="flex-1 border-2 border-dashed border-blue-200 text-blue-500 rounded-xl py-3 text-sm font-semibold hover:border-blue-400 active:bg-blue-50"
+            >
+              + Thêm hàng hóa
+            </button>
+            <button
+              onClick={doSaveAll}
+              disabled={savingAll}
+              className="flex-1 bg-blue-600 text-white rounded-xl py-3 text-sm font-bold active:bg-blue-700 disabled:opacity-50"
+            >
+              {savingAll ? 'Đang lưu...' : '💾 Lưu Tất Cả'}
+            </button>
+          </div>
         </div>
       </div>
 
-      {/* === MONTHLY RESULTS === */}
-      <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
-        <div className="flex flex-wrap justify-between items-start mb-5 gap-3">
-          <div>
-            <h2 className="text-xl font-bold">Kết Quả Tháng {currentMonth.replace('-', '/')}</h2>
-            <p className="text-sm text-gray-500 mt-1">Mỗi tháng mới sẽ bắt đầu tính lại từ đầu</p>
-          </div>
+      {/* ===== MONTHLY RESULTS ===== */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+        <div className="bg-gradient-to-r from-gray-700 to-gray-600 px-4 py-3 flex justify-between items-center flex-wrap gap-2">
+          <h2 className="text-white font-bold text-base">📊 Kết Quả Tháng {currentMonth.replace('-', '/')}</h2>
           {monthTarget > 0 && (
             <div className="text-right">
-              <div className="text-sm text-gray-500">Tổng Mẫu KT Tháng Này</div>
-              <div className={`text-lg font-bold ${monthTotalKT > monthTarget ? 'text-red-600' : 'text-green-600'}`}>
-                {formatCurrency(monthTotalKT)} đ
-              </div>
-              <div className="text-xs text-gray-400">/ Mục tiêu: {formatCurrency(monthTarget)} đ</div>
-              <div className="mt-1 h-2 bg-gray-200 rounded-full w-40 overflow-hidden">
-                <div
-                  className={`h-full rounded-full transition-all ${monthTotalKT > monthTarget ? 'bg-red-500' : 'bg-green-500'}`}
-                  style={{ width: `${Math.min((monthTotalKT / monthTarget) * 100, 100)}%` }}
-                />
+              <div className="text-white/80 text-xs">Tổng Mẫu KT</div>
+              <div className={`font-bold text-sm ${monthTotalKT > monthTarget ? 'text-red-300' : 'text-green-300'}`}>
+                {fmt(monthTotalKT)} đ
               </div>
             </div>
           )}
         </div>
 
-        {sortedDates.length === 0 ? (
-          <p className="text-gray-400 text-center py-10">Chưa có dữ liệu trong tháng này.</p>
-        ) : (
-          <div className="space-y-4">
-            {sortedDates.map(d => {
-              const recs = groupedByDate[d];
-              const dayTotal = recs.reduce((s: number, r: any) => s + (r.accounting_amount || 0), 0);
-              const isToday = d === today;
-              return (
-                <div key={d} className={`rounded-lg border overflow-hidden ${isToday ? 'border-blue-300' : 'border-gray-100'}`}>
-                  <div className={`px-4 py-2 flex justify-between items-center text-sm font-semibold ${isToday ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-700'}`}>
-                    <span>{isToday ? '📅 Hôm Nay — ' : ''}{new Date(d + 'T00:00:00').toLocaleDateString('vi-VN', { weekday: 'long', year: 'numeric', month: '2-digit', day: '2-digit' })}</span>
-                    <span>Tổng Mẫu KT: {formatCurrency(dayTotal)} đ</span>
-                  </div>
-                  <table className="w-full text-left text-sm">
-                    <thead>
-                      <tr className="border-b bg-gray-50/50">
-                        <th className="px-4 py-2 text-gray-500 font-medium">Hàng Hóa</th>
-                        <th className="px-4 py-2 text-gray-500 font-medium text-right">Tiền CK</th>
-                        <th className="px-4 py-2 text-gray-500 font-medium text-right">Tiền Mặt</th>
-                        <th className="px-4 py-2 text-green-600 font-medium text-right">Mẫu KT</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {recs.map((r: any) => (
-                        <tr key={r.id} className="border-b last:border-0 hover:bg-gray-50">
-                          <td className="px-4 py-2 font-medium">{r.product_name}</td>
-                          <td className="px-4 py-2 text-right">{formatCurrency(r.transfer)} đ</td>
-                          <td className="px-4 py-2 text-right">{formatCurrency(r.cash)} đ</td>
-                          <td className="px-4 py-2 text-right font-bold text-green-700">{formatCurrency(r.accounting_amount)} đ</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              );
-            })}
+        {/* Progress bar */}
+        {monthTarget > 0 && (
+          <div className="px-4 pt-3 pb-1">
+            <div className="flex justify-between text-xs text-gray-400 mb-1">
+              <span>0</span>
+              <span>{Math.round(pct)}% mục tiêu tháng</span>
+              <span>{fmt(monthTarget)} đ</span>
+            </div>
+            <div className="h-2.5 bg-gray-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all duration-500 ${pct >= 100 ? 'bg-red-500' : 'bg-green-500'}`}
+                style={{ width: `${pct}%` }}
+              />
+            </div>
           </div>
         )}
+
+        <div className="p-4 space-y-3">
+          {sortedDates.length === 0 ? (
+            <p className="text-center text-gray-400 py-8 text-sm">Chưa có dữ liệu trong tháng này.</p>
+          ) : sortedDates.map(d => {
+            const recs = grouped[d];
+            const dayTotalKT = recs.reduce((s: number, r: any) => s + (r.accounting_amount || 0), 0);
+            const isToday = d === today;
+            return (
+              <div key={d} className={`rounded-xl border overflow-hidden ${isToday ? 'border-blue-300' : 'border-gray-100'}`}>
+                <div className={`px-3 py-2 flex justify-between items-center text-sm font-semibold ${isToday ? 'bg-blue-600 text-white' : 'bg-gray-50 text-gray-700'}`}>
+                  <span>
+                    {isToday ? '📅 Hôm Nay · ' : ''}
+                    {new Date(d + 'T00:00:00').toLocaleDateString('vi-VN', { weekday: 'short', day: '2-digit', month: '2-digit' })}
+                  </span>
+                  <span className={`font-bold text-sm ${isToday ? 'text-white' : 'text-green-600'}`}>{fmt(dayTotalKT)} đ</span>
+                </div>
+                <div className="divide-y divide-gray-50">
+                  {recs.map((r: any) => (
+                    <div key={r.id} className="px-3 py-2 flex justify-between items-center">
+                      <div>
+                        <div className="font-medium text-sm text-gray-800">{r.product_name}</div>
+                        <div className="text-xs text-gray-400">CK: {fmt(r.transfer)} đ · TM: {fmt(r.cash)} đ</div>
+                      </div>
+                      <div className="text-right">
+                        <div className="font-bold text-green-700 text-sm">{fmt(r.accounting_amount)} đ</div>
+                        <div className="text-xs text-gray-400">Mẫu KT</div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

@@ -78,7 +78,7 @@ export default function DashboardPage() {
         </button>
       </header>
 
-      <main className="flex-1 max-w-6xl w-full mx-auto p-4 md:p-6 space-y-6">
+      <main className="flex-1 max-w-2xl w-full mx-auto p-3 md:p-6 space-y-4 pb-8">
         
         {/* Daily Input Form - Accessible to everyone */}
         <DailyEntryForm settings={settings} />

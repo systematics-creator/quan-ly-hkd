@@ -36,5 +36,33 @@
   * {
     border-color: var(--color-border);
     outline: none;
+    -webkit-tap-highlight-color: transparent;
+    box-sizing: border-box;
+  }
+
+  html {
+    /* Prevent iOS font size bump on orientation change */
+    -webkit-text-size-adjust: 100%;
+    scroll-behavior: smooth;
+  }
+
+  body {
+    /* Prevent overscroll bounce on iOS */
+    overscroll-behavior: none;
+  }
+
+  input, select, textarea, button {
+    /* iOS fix: prevent zoom on input focus (font-size must be >= 16px) */
+    font-size: 16px;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  input[type="email"],
+  input[type="password"],
+  input[type="date"] {
+    /* Remove iOS inner shadow */
+    -webkit-appearance: none;
+    appearance: none;
   }
 }
