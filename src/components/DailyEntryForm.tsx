@@ -118,6 +118,18 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     }
   };
 
+  const formatCurrency = (val: number) => {
+    if (!val) return '';
+    return new Intl.NumberFormat('vi-VN').format(val);
+  };
+
+  const handleCurrencyInput = (index: number, field: 'transfer' | 'cash') => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value.replace(/[^0-9]/g, '');
+    const newRecs = [...records];
+    newRecs[index][field] = Number(rawValue);
+    setRecords(newRecs);
+  };
+
   return (
     <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
       <div className="flex justify-between items-center mb-6">
@@ -146,21 +158,22 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
               <tr key={index} className="border-b">
                 <td className="p-3 font-medium">{rec.product_name}</td>
                 <td className="p-3">
-                  <input type="number" className="border w-full p-2 rounded" value={rec.transfer} onChange={e => {
-                    const newRecs = [...records];
-                    newRecs[index].transfer = Number(e.target.value);
-                    setRecords(newRecs);
-                  }} />
+                  <div className="relative">
+                    <input type="text" className="border w-full p-2 pr-8 rounded text-right" value={formatCurrency(rec.transfer)} onChange={handleCurrencyInput(index, 'transfer')} />
+                    <span className="absolute right-2 top-2.5 text-gray-400 text-sm">đ</span>
+                  </div>
                 </td>
                 <td className="p-3">
-                  <input type="number" className="border w-full p-2 rounded" value={rec.cash} onChange={e => {
-                    const newRecs = [...records];
-                    newRecs[index].cash = Number(e.target.value);
-                    setRecords(newRecs);
-                  }} />
+                  <div className="relative">
+                    <input type="text" className="border w-full p-2 pr-8 rounded text-right" value={formatCurrency(rec.cash)} onChange={handleCurrencyInput(index, 'cash')} />
+                    <span className="absolute right-2 top-2.5 text-gray-400 text-sm">đ</span>
+                  </div>
                 </td>
                 <td className="p-3">
-                  <input type="number" disabled className="border w-full p-2 rounded bg-gray-100 font-semibold" value={calculateAutoKT(rec.transfer)} />
+                  <div className="relative">
+                    <input type="text" disabled className="border w-full p-2 pr-8 rounded bg-gray-100 font-semibold text-right" value={formatCurrency(calculateAutoKT(rec.transfer))} />
+                    <span className="absolute right-2 top-2.5 text-gray-400 text-sm">đ</span>
+                  </div>
                 </td>
                 <td className="p-3">
                   <button onClick={() => handleSave(index)} className="bg-blue-600 text-white px-4 py-2 rounded font-medium hover:bg-blue-700">

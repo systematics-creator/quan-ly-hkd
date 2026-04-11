@@ -28,7 +28,7 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
       setYearlyLimit(settings.yearly_kt_limit || 0);
     }
     if (shop) {
-      setShopName(shop.name);
+      setShopName(shop.name || '');
       fetchUsers();
     }
   }, [settings, shop]);
@@ -43,45 +43,44 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
     e.preventDefault();
     if (!appUser?.shop_id) return;
 
-    // Save Shop name
-    await supabase.from('shops').update({ name: shopName }).eq('id', appUser.shop_id);
+    try {
+      // Save Shop name
+      const { error: shopError } = await supabase.from('shops').update({ name: shopName }).eq('id', appUser.shop_id);
+      if (shopError) throw new Error("Lỗi cập nhật tên shop: " + shopError.message);
 
-    // Save Settings
-    if (settings?.id) {
-      await supabase.from('shop_settings').update({
-        min_kt: minKt,
-        max_kt: maxKt,
-        yearly_kt_limit: yearlyLimit
-      }).eq('id', settings.id);
-    } else {
-      await supabase.from('shop_settings').insert({
-        shop_id: appUser.shop_id,
-        min_kt: minKt,
-        max_kt: maxKt,
-        yearly_kt_limit: yearlyLimit
-      });
+      // Save Settings
+      if (settings?.id) {
+        const { error: setErr } = await supabase.from('shop_settings').update({
+          min_kt: minKt,
+          max_kt: maxKt,
+          yearly_kt_limit: yearlyLimit
+        }).eq('id', settings.id);
+        if (setErr) throw new Error("Lỗi cập nhật thiết lập: " + setErr.message);
+      } else {
+        const { error: insErr } = await supabase.from('shop_settings').insert({
+          shop_id: appUser.shop_id,
+          min_kt: minKt,
+          max_kt: maxKt,
+          yearly_kt_limit: yearlyLimit
+        });
+        if (insErr) throw new Error("Lỗi tạo mới thiết lập: " + insErr.message);
+      }
+
+      alert('Lưu cấu hình và thông tin thành công!');
+      onSettingsUpdated();
+    } catch (err: any) {
+      alert(err.message);
     }
-
-    alert('Lưu cấu hình và thông tin thành công!');
-    onSettingsUpdated(); // This should trigger a refetch of shop as well if we pass a callback for it, but for now it works for settings.
   };
 
-  const handleCreateUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!appUser?.shop_id) return;
-    setLoading(true);
+  const formatCurrency = (val: number) => {
+    if (!val) return '';
+    return new Intl.NumberFormat('vi-VN').format(val);
+  };
 
-    const res = await createUserWithRole(newUserEmail, newUserPass, newUserRole, appUser.shop_id);
-    
-    if (res.error) {
-      alert('Lỗi tạo user: ' + res.error);
-    } else {
-      alert('Đã tạo user thành công!');
-      setNewUserEmail('');
-      setNewUserPass('');
-      fetchUsers();
-    }
-    setLoading(false);
+  const handleCurrencyInput = (setter: (v: number) => void) => (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawValue = e.target.value.replace(/[^0-9]/g, '');
+    setter(Number(rawValue));
   };
 
   if (appUser?.role !== 'admin') return null;
@@ -105,32 +104,41 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
           </div>
 
           <div>
-            <label className="block text-sm font-semibold mb-1">Giới hạn Tối Thiểu (Mẫu KT)</label>
-            <input 
-              type="number" 
-              value={minKt} 
-              onChange={e => setMinKt(Number(e.target.value))}
-              className="border p-2 rounded w-full"
-            />
+            <label className="block text-sm font-semibold mb-1">Giới hạn Tiền Tối Thiểu (Mẫu KT)</label>
+            <div className="relative">
+              <input 
+                type="text" 
+                value={formatCurrency(minKt)} 
+                onChange={handleCurrencyInput(setMinKt)}
+                className="border p-2 rounded w-full pr-10"
+              />
+              <span className="absolute right-3 top-2.5 text-gray-500 font-medium">đ</span>
+            </div>
           </div>
           <div>
-            <label className="block text-sm font-semibold mb-1">Giới hạn Tối Đa (Mẫu KT)</label>
-            <input 
-              type="number" 
-              value={maxKt} 
-              onChange={e => setMaxKt(Number(e.target.value))}
-              className="border p-2 rounded w-full"
-            />
+            <label className="block text-sm font-semibold mb-1">Giới hạn Tiền Tối Đa (Mẫu KT)</label>
+            <div className="relative">
+              <input 
+                type="text" 
+                value={formatCurrency(maxKt)} 
+                onChange={handleCurrencyInput(setMaxKt)}
+                className="border p-2 rounded w-full pr-10"
+              />
+              <span className="absolute right-3 top-2.5 text-gray-500 font-medium">đ</span>
+            </div>
           </div>
           <div className="md:col-span-2 border-t pt-4">
-            <label className="block text-sm font-semibold mb-1 text-red-600">Tổng Mẫu KT Phải Đạt Trong Năm</label>
-            <input 
-              type="number" 
-              required
-              value={yearlyLimit} 
-              onChange={e => setYearlyLimit(Number(e.target.value))}
-              className="border border-red-200 bg-red-50 p-2 rounded w-full font-bold md:w-1/2"
-            />
+            <label className="block text-sm font-semibold mb-1 text-red-600">Tổng Tiền - Mẫu KT Phải Đạt Trong Năm</label>
+            <div className="relative md:w-1/2">
+              <input 
+                type="text" 
+                required
+                value={formatCurrency(yearlyLimit)} 
+                onChange={handleCurrencyInput(setYearlyLimit)}
+                className="border border-red-200 bg-red-50 p-2 rounded w-full font-bold pr-10"
+              />
+              <span className="absolute right-3 top-2.5 text-red-600 font-bold">đ</span>
+            </div>
           </div>
           
           <div className="md:col-span-2">
