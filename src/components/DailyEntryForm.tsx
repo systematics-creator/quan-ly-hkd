@@ -42,17 +42,24 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
 
   const loadMonthlyResults = async () => {
     if (!appUser?.shop_id) return;
-    // Lọc CHÍNH XÁC theo tháng của ngày đang chọn
+    
+    // Lấy ngày đầu tháng và ngày đầu tháng sau để lọc chính xác
+    const [year, month] = currentMonth.split('-').map(Number);
     const firstDay = `${currentMonth}-01`;
-    const lastDay = `${currentMonth}-31`;
+    const nextMonthObj = new Date(year, month, 1);
+    const nextMonthStr = nextMonthObj.toISOString().split('T')[0];
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('daily_records').select('*')
       .eq('shop_id', appUser.shop_id)
       .gte('date', firstDay)
-      .lte('date', lastDay)
-      .order('created_at', { ascending: false }); // Mới nhất lên trên
+      .lt('date', nextMonthStr) // Lọc từ mùng 1 đến trước mùng 1 tháng sau
+      .order('created_at', { ascending: false });
 
+    if (error) {
+      console.error("Lỗi tải dữ liệu tháng:", error.message);
+      return;
+    }
     if (data) setMonthlyRecords(data);
   };
 
@@ -104,16 +111,16 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     setSaving(index);
     
     // Tìm Mẫu KT gần nhất của mặt hàng này
-    const { data: lastRec } = await supabase
+    const { data: history } = await supabase
       .from('daily_records')
       .select('accounting_amount')
       .eq('product_name', rec.product_name)
       .eq('shop_id', appUser?.shop_id)
       .order('created_at', { ascending: false })
-      .limit(1)
-      .single();
+      .limit(1);
 
-    const { value: kt } = calcKT(rec.transfer, rec.cash, lastRec?.accounting_amount);
+    const lastKT = (history && history.length > 0) ? history[0].accounting_amount : 0;
+    const { value: kt } = calcKT(rec.transfer, rec.cash, lastKT);
     
     const { data: ins, error: saveErr } = await supabase.from('daily_records').insert({
       cash: rec.cash, 
