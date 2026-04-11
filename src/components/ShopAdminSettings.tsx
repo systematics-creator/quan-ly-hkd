@@ -3,13 +3,23 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
+import { createUserWithRole } from '@/app/actions';
 
 export default function ShopAdminSettings({ settings, onSettingsUpdated }: { settings: any, onSettingsUpdated: () => void }) {
-  const { appUser } = useAuth();
+  const { appUser, shop } = useAuth();
   
+  // Settings Mode
   const [minKt, setMinKt] = useState(0);
   const [maxKt, setMaxKt] = useState(0);
   const [yearlyLimit, setYearlyLimit] = useState(0);
+  const [shopName, setShopName] = useState('');
+
+  // User Management
+  const [users, setUsers] = useState<any[]>([]);
+  const [newUserEmail, setNewUserEmail] = useState('');
+  const [newUserPass, setNewUserPass] = useState('');
+  const [newUserRole, setNewUserRole] = useState('user');
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (settings) {
@@ -17,21 +27,33 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
       setMaxKt(settings.max_kt || 0);
       setYearlyLimit(settings.yearly_kt_limit || 0);
     }
-  }, [settings]);
+    if (shop) {
+      setShopName(shop.name);
+      fetchUsers();
+    }
+  }, [settings, shop]);
+
+  const fetchUsers = async () => {
+    if (!appUser?.shop_id) return;
+    const { data } = await supabase.from('users').select('*').eq('shop_id', appUser.shop_id);
+    if (data) setUsers(data);
+  };
 
   const handleSaveSettings = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!appUser?.shop_id) return;
 
+    // Save Shop name
+    await supabase.from('shops').update({ name: shopName }).eq('id', appUser.shop_id);
+
+    // Save Settings
     if (settings?.id) {
-      // update
       await supabase.from('shop_settings').update({
         min_kt: minKt,
         max_kt: maxKt,
         yearly_kt_limit: yearlyLimit
       }).eq('id', settings.id);
     } else {
-      // insert
       await supabase.from('shop_settings').insert({
         shop_id: appUser.shop_id,
         min_kt: minKt,
@@ -40,56 +62,141 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
       });
     }
 
-    alert('Lưu cấu hình thành công!');
-    onSettingsUpdated();
+    alert('Lưu cấu hình và thông tin thành công!');
+    onSettingsUpdated(); // This should trigger a refetch of shop as well if we pass a callback for it, but for now it works for settings.
+  };
+
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!appUser?.shop_id) return;
+    setLoading(true);
+
+    const res = await createUserWithRole(newUserEmail, newUserPass, newUserRole, appUser.shop_id);
+    
+    if (res.error) {
+      alert('Lỗi tạo user: ' + res.error);
+    } else {
+      alert('Đã tạo user thành công!');
+      setNewUserEmail('');
+      setNewUserPass('');
+      fetchUsers();
+    }
+    setLoading(false);
   };
 
   if (appUser?.role !== 'admin') return null;
 
   return (
-    <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm mt-6">
-      <h2 className="text-xl font-bold mb-4">Cấu Hình Shop (Dành cho Admin)</h2>
-      <p className="text-gray-500 text-sm mb-6">Bạn cần nhập đầy đủ Số Tiền Tổng mẫu KT năm trong lần đầu tiên đăng nhập.</p>
-
-      <form onSubmit={handleSaveSettings} className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <div>
-          <label className="block text-sm font-semibold mb-1">Giới hạn Tối Thiểu (Mẫu KT)</label>
-          <input 
-            type="number" 
-            value={minKt} 
-            onChange={e => setMinKt(Number(e.target.value))}
-            className="border p-2 rounded w-full"
-          />
-          <p className="text-xs text-gray-400 mt-1">Ví dụ: 1500000</p>
-        </div>
-        <div>
-          <label className="block text-sm font-semibold mb-1">Giới hạn Tối Đa (Mẫu KT)</label>
-          <input 
-            type="number" 
-            value={maxKt} 
-            onChange={e => setMaxKt(Number(e.target.value))}
-            className="border p-2 rounded w-full"
-          />
-          <p className="text-xs text-gray-400 mt-1">Ví dụ: 3500000</p>
-        </div>
-        <div>
-          <label className="block text-sm font-semibold mb-1 text-red-600">Tổng Số Tiền Mẫu KT (Năm)</label>
-          <input 
-            type="number" 
-            required
-            value={yearlyLimit} 
-            onChange={e => setYearlyLimit(Number(e.target.value))}
-            className="border border-red-200 bg-red-50 p-2 rounded w-full font-bold"
-          />
-          <p className="text-xs text-red-400 mt-1">Tổng 12 tháng buộc phải <= số này.</p>
-        </div>
+    <div className="space-y-6 mt-6">
+      <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+        <h2 className="text-xl font-bold mb-4">Cấu Hình Shop & Giới Hạn</h2>
         
-        <div className="md:col-span-3">
-          <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700">
-            Cập nhật cấu hình
+        <form onSubmit={handleSaveSettings} className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">
+          <div className="md:col-span-2">
+            <label className="block text-sm font-semibold mb-1 text-blue-700">Tên Đầy Đủ Của Cửa Hàng</label>
+            <input 
+              type="text" 
+              required
+              value={shopName} 
+              onChange={e => setShopName(e.target.value)}
+              className="border p-2 rounded w-full font-bold"
+              placeholder="Ví dụ: Đại Lý Yến Sào Chi Nhánh A"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-semibold mb-1">Giới hạn Tối Thiểu (Mẫu KT)</label>
+            <input 
+              type="number" 
+              value={minKt} 
+              onChange={e => setMinKt(Number(e.target.value))}
+              className="border p-2 rounded w-full"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-semibold mb-1">Giới hạn Tối Đa (Mẫu KT)</label>
+            <input 
+              type="number" 
+              value={maxKt} 
+              onChange={e => setMaxKt(Number(e.target.value))}
+              className="border p-2 rounded w-full"
+            />
+          </div>
+          <div className="md:col-span-2 border-t pt-4">
+            <label className="block text-sm font-semibold mb-1 text-red-600">Tổng Mẫu KT Phải Đạt Trong Năm</label>
+            <input 
+              type="number" 
+              required
+              value={yearlyLimit} 
+              onChange={e => setYearlyLimit(Number(e.target.value))}
+              className="border border-red-200 bg-red-50 p-2 rounded w-full font-bold md:w-1/2"
+            />
+          </div>
+          
+          <div className="md:col-span-2">
+            <button type="submit" className="bg-blue-600 text-white px-6 py-2 rounded-lg font-medium hover:bg-blue-700">
+              Cập nhật cấu hình
+            </button>
+          </div>
+        </form>
+      </div>
+
+      {/* USER MANAGEMENT */}
+      <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
+        <h2 className="text-xl font-bold mb-4">Quản Lý Nhân Sự (Tài Khoản)</h2>
+        
+        <form onSubmit={handleCreateUser} className="flex flex-wrap gap-4 mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+          <input 
+            type="email" 
+            placeholder="Email (Tài khoản)" 
+            required
+            value={newUserEmail}
+            onChange={e => setNewUserEmail(e.target.value)}
+            className="border p-2 rounded flex-1 min-w-[200px]"
+          />
+          <input 
+            type="text" 
+            placeholder="Mật khẩu" 
+            required
+            value={newUserPass}
+            onChange={e => setNewUserPass(e.target.value)}
+            className="border p-2 rounded flex-1 min-w-[150px]"
+          />
+          <select 
+            value={newUserRole} 
+            onChange={e => setNewUserRole(e.target.value)}
+            className="border p-2 rounded shrink-0 bg-white"
+          >
+            <option value="user">Nhân Viên (User)</option>
+            <option value="manager">Quản Lý (Manager)</option>
+            <option value="admin">Admin Cửa Hàng</option>
+          </select>
+          <button type="submit" disabled={loading} className="bg-green-600 text-white px-4 py-2 rounded font-medium hover:bg-green-700 disabled:bg-gray-400">
+            {loading ? 'Đang tạo...' : '+ Cấp quyền'}
           </button>
-        </div>
-      </form>
+        </form>
+
+        <h3 className="font-semibold mb-2">Danh Sách User Sở Hữu Thuộc Shop Này</h3>
+        <table className="w-full text-left bg-white border">
+          <thead className="bg-gray-100 border-b">
+            <tr>
+              <th className="p-2">Email</th>
+              <th className="p-2">Vai trò (Role)</th>
+              <th className="p-2">Ngày Tạo</th>
+            </tr>
+          </thead>
+          <tbody>
+            {users.map(u => (
+              <tr key={u.id} className="border-b hover:bg-gray-50">
+                <td className="p-2">{u.email}</td>
+                <td className="p-2 uppercase text-sm font-semibold text-gray-600">{u.role}</td>
+                <td className="p-2">{new Date(u.created_at).toLocaleDateString('vi-VN')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+
+      </div>
     </div>
   );
 }
