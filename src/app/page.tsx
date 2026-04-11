@@ -34,7 +34,20 @@ export default function DashboardPage() {
     if (data) setSettings(data);
   };
 
-  if (loading || !user) return <div className="p-8 text-center text-gray-500 font-medium">Đang tải dữ liệu...</div>;
+  if (loading || !user) {
+    if (!loading && !user) {
+       // Force navigation bypassing Next router cache
+       if (typeof window !== 'undefined') window.location.href = '/login';
+    }
+    return (
+      <div className="p-8 text-center text-gray-500 font-medium">
+        Đang tải dữ liệu... <br />
+        <span className="text-xs text-red-500 mt-4 block">
+          Debug: [Loading: {loading ? 'Yes' : 'No'} | User: {user ? 'Yes' : 'No'}]
+        </span>
+      </div>
+    );
+  }
 
   if (appUser?.role === 'super_admin') {
     return (
