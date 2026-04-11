@@ -46,76 +46,87 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const router = useRouter();
 
   useEffect(() => {
-    // Listen to auth state changes only - onAuthStateChange fires INITIAL_SESSION on load
-    const { data: authListener } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        const currentUser = session?.user ?? null;
-        setUser(currentUser);
+    let mounted = true;
+    let isFetching = false;
 
-        if (!currentUser) {
-          setAppUser(null);
-          setShop(null);
-          setLoading(false);
-          return;
-        }
+    const syncProfile = async (session: any) => {
+      if (isFetching || !mounted || !session?.user) return;
+      try {
+        isFetching = true;
+        const { data: userData, error: userError } = await supabase
+          .from('users').select('*').eq('id', session.user.id).single();
 
-        // Fetch user profile from DB
-        try {
-          const { data: userData } = await supabase
-            .from('users')
-            .select('*')
-            .eq('id', currentUser.id)
-            .single();
-
-          if (!userData) {
-            // No profile found → sign out and redirect
-            await supabase.auth.signOut();
-            setAppUser(null);
-            setShop(null);
-            setLoading(false);
-            return;
-          }
-
+        if (!userError && userData && mounted) {
           setAppUser(userData as AppUser);
-
-          // super_admin has no shop
-          if (userData.role === 'super_admin') {
-            setShop(null);
-            setLoading(false);
-            return;
-          }
-
-          // Fetch shop
-          if (userData.shop_id) {
+          localStorage.setItem('appUser', JSON.stringify(userData));
+          
+          if (userData.role !== 'super_admin' && userData.shop_id) {
             const { data: shopData } = await supabase
-              .from('shops')
-              .select('*')
-              .eq('id', userData.shop_id)
-              .single();
-
-            if (shopData) {
+              .from('shops').select('*').eq('id', userData.shop_id).single();
+            if (mounted && shopData) {
               setShop(shopData as Shop);
-              // Check expiry
-              if (!shopData.is_active || new Date(shopData.expire_at) < new Date()) {
-                setLoading(false);
-                router.push('/blocked');
-                return;
-              }
-            } else {
-              setShop(null);
+              localStorage.setItem('shop', JSON.stringify(shopData));
             }
           }
-        } catch (err) {
-          console.error('AuthProvider error:', err);
-          setAppUser(null);
-          setShop(null);
-        } finally {
-          setLoading(false);
         }
+      } catch (err) {
+        console.error('Sync error:', err);
+      } finally {
+        isFetching = false;
+        if (mounted) setLoading(false);
       }
-    );
+    };
+
+    // 1. Phá bỏ mọi sự chờ đợi sau 1.5 giây
+    const timeout = setTimeout(() => {
+      if (mounted) setLoading(false);
+    }, 1500);
+
+    // 2. Tải nhanh session
+    const init = async () => {
+      const cachedSession = typeof window !== 'undefined' ? localStorage.getItem('sb-session-cache') : null;
+      
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!mounted) return;
+
+      if (session) {
+        setUser(session.user);
+        const cachedUser = localStorage.getItem('appUser');
+        const cachedShop = localStorage.getItem('shop');
+        if (cachedUser) setAppUser(JSON.parse(cachedUser));
+        if (cachedShop) setShop(JSON.parse(cachedShop));
+        
+        setLoading(false); 
+        syncProfile(session);
+      } else {
+        setLoading(false);
+      }
+    };
+
+    init();
+
+    // 3. Listener
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+        const currentUser = session?.user ?? null;
+        if (currentUser) {
+           setUser(currentUser);
+           setLoading(false);
+           syncProfile(session);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        localStorage.removeItem('appUser');
+        localStorage.removeItem('shop');
+        setUser(null);
+        setAppUser(null);
+        setShop(null);
+        setLoading(false);
+      }
+    });
 
     return () => {
+      mounted = false;
+      clearTimeout(timeout);
       authListener.subscription.unsubscribe();
     };
   }, [router]);

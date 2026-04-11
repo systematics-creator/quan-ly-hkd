@@ -34,18 +34,9 @@ export default function DashboardPage() {
     if (data) setSettings(data);
   };
 
-  if (loading) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <div className="text-center">
-          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
-          <p className="text-gray-500 font-medium">Đang tải dữ liệu...</p>
-        </div>
-      </div>
-    );
+  if (!user && !loading) {
+    return null;
   }
-
-  if (!user) return null;
 
   if (appUser?.role === 'super_admin') {
     return (
