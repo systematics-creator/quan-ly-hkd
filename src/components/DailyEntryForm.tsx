@@ -256,13 +256,34 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                     
                     {isEditing ? (
                       <>
-                        <td className="px-1 py-1"><input type="text" value={editFormData.date} onChange={e => setEditFormData({...editFormData, date: e.target.value})} className="w-full border rounded px-1 py-1 text-[9px]" /></td>
-                        <td className="px-1 py-1"><input type="text" value={editFormData.product_name} onChange={e => setEditFormData({...editFormData, product_name: e.target.value})} className="w-full border rounded px-1 py-1 font-bold" /></td>
-                        <td className="px-1 py-1"><input type="text" value={fmt(editFormData.transfer)} onChange={e => setEditFormData({...editFormData, transfer: parseMoney(e.target.value)})} className="w-full border rounded px-1 py-1 text-right" /></td>
+                        <td className="px-1 py-1">
+                          <input 
+                            type="text" 
+                            value={editFormData.date} 
+                            onChange={e => setEditFormData({...editFormData, date: e.target.value})} 
+                            className="w-full border border-blue-300 rounded px-1 py-2 text-[10px] bg-white focus:scale-110 focus:shadow-xl focus:z-50 relative transition-all outline-none" 
+                          />
+                        </td>
+                        <td className="px-1 py-1">
+                          <input 
+                            type="text" 
+                            value={editFormData.product_name} 
+                            onChange={e => setEditFormData({...editFormData, product_name: e.target.value})} 
+                            className="w-full border border-blue-300 rounded px-2 py-2 font-bold text-sm bg-white focus:scale-125 focus:shadow-xl focus:z-50 relative transition-all outline-none min-w-[120px]" 
+                          />
+                        </td>
+                        <td className="px-1 py-1">
+                          <input 
+                            type="text" 
+                            value={fmt(editFormData.transfer)} 
+                            onChange={e => setEditFormData({...editFormData, transfer: parseMoney(e.target.value)})} 
+                            className="w-full border border-blue-300 rounded px-1 py-2 text-right font-black text-sm bg-white focus:scale-110 focus:shadow-xl focus:z-50 relative transition-all outline-none" 
+                          />
+                        </td>
                         <td className="px-1 py-1 text-right font-bold text-green-600">Auto</td>
-                        <td className="px-1 py-1 text-center flex gap-1 justify-center py-2">
-                           <button onClick={handleSaveEdit} className="text-lg">✅</button>
-                           <button onClick={() => setEditingId(null)} className="text-lg">❌</button>
+                        <td className="px-1 py-1 text-center flex gap-1 justify-center items-center h-full pt-1">
+                           <button onClick={handleSaveEdit} className="text-xl active:scale-95">✅</button>
+                           <button onClick={() => setEditingId(null)} className="text-xl active:scale-95">❌</button>
                         </td>
                       </>
                     ) : (
