@@ -113,26 +113,25 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
       <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
         <h2 className="text-xl font-bold mb-4">Cấu Hình Shop & Giới Hạn</h2>
 
-        {/* Current config summary */}
+        {/* Current config summary - Compact for Mobile */}
         {(settings?.min_kt || settings?.max_kt || settings?.yearly_kt_limit) && (
-          <div className="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-4">
-            <h3 className="text-sm font-bold text-blue-700 mb-3 uppercase tracking-wide">Cấu hình hiện tại</h3>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <div className="bg-white rounded-lg p-3 border border-blue-100 text-center">
-                <div className="text-xs text-gray-500 mb-1">Giới Hạn Tối Thiểu</div>
-                <div className="font-bold text-blue-700 text-lg">{formatCurrencyDisplay(settings.min_kt)}</div>
+          <div className="mb-4 rounded-lg bg-blue-50/50 border border-blue-100 p-2 sm:p-4">
+            <h3 className="text-[10px] font-bold text-blue-700 mb-2 uppercase tracking-wide px-1">Cấu hình hiện tại</h3>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 sm:gap-4">
+              <div className="bg-white rounded border border-blue-50 p-2 text-center">
+                <div className="text-[9px] text-gray-400 mb-0.5">Min KT</div>
+                <div className="font-bold text-blue-700 text-sm">{formatCurrencyDisplay(settings.min_kt)}</div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-blue-100 text-center">
-                <div className="text-xs text-gray-500 mb-1">Giới Hạn Tối Đa</div>
-                <div className="font-bold text-blue-700 text-lg">{formatCurrencyDisplay(settings.max_kt)}</div>
+              <div className="bg-white rounded border border-blue-50 p-2 text-center">
+                <div className="text-[9px] text-gray-400 mb-0.5">Max KT</div>
+                <div className="font-bold text-blue-700 text-sm">{formatCurrencyDisplay(settings.max_kt)}</div>
               </div>
-              <div className="bg-white rounded-lg p-3 border border-red-100 text-center">
-                <div className="text-xs text-gray-500 mb-1">Tổng Năm (÷12/tháng)</div>
-                <div className="font-bold text-red-600 text-lg">{formatCurrencyDisplay(settings.yearly_kt_limit)}</div>
-                <div className="text-xs text-gray-400">{formatCurrencyDisplay(Math.round(settings.yearly_kt_limit / 12))}/tháng</div>
+              <div className="bg-white rounded border border-red-50 p-2 text-center col-span-2 sm:col-span-1">
+                <div className="text-[9px] text-red-500 mb-0.5">Năm (÷12)</div>
+                <div className="font-bold text-red-600 text-sm">{formatCurrencyDisplay(settings.yearly_kt_limit)}</div>
+                <div className="text-[8px] text-gray-400">{formatCurrencyDisplay(Math.round(settings.yearly_kt_limit / 12))}/th</div>
               </div>
             </div>
-            <div className="mt-2 text-xs text-gray-500 text-center">Tên shop: <span className="font-semibold text-gray-700">{shopName || shop?.name}</span></div>
           </div>
         )}
         

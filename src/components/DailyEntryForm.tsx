@@ -100,19 +100,29 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       product_name: rec.product_name 
     };
 
-    if (rec.id) {
-      await supabase.from('daily_records').update(payload).eq('id', rec.id);
+    const { data: ins, error: saveErr } = await supabase.from('daily_records').insert({
+      ...payload,
+      shop_id: appUser?.shop_id, 
+      date
+    }).select().single();
+
+    if (saveErr) {
+       alert('Lỗi lưu: ' + saveErr.message);
     } else {
-      const { data: ins } = await supabase.from('daily_records').insert({
-        ...payload,
-        shop_id: appUser?.shop_id, 
-        date
-      }).select().single();
-      if (ins) {
-        const nr = [...inputRows]; nr[index] = { ...ins }; setInputRows(nr);
-      }
+      // RESET LUỒNG: Sau khi lưu xong, đưa dòng này về trạng thái mới 
+      // Nhưng giữ lại tên mặt hàng cho lần nhập tiếp theo
+      const nr = [...inputRows];
+      nr[index] = { 
+        product_name: rec.product_name, 
+        cash: 0, 
+        transfer: 0, 
+        accounting_amount: ins.accounting_amount, // Giữ mẫu KT vừa lưu làm gợi ý kế tiếp
+        isNew: true 
+      };
+      setInputRows(nr);
+      if (warn) alert(warn);
     }
-    if (warn) alert(warn);
+
     await loadMonthlyResults();
     setSaving(null);
   };
@@ -121,7 +131,8 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     setSavingAll(true);
     for (let i = 0; i < inputRows.length; i++) {
       const rec = inputRows[i];
-      if (!rec.product_name.trim()) continue;
+      if (!rec.product_name.trim() || (rec.cash === 0 && rec.transfer === 0)) continue;
+      
       const { value: kt } = calcKT(rec.transfer, rec.cash, rec.accounting_amount);
       const payload = { 
         cash: rec.cash, 
@@ -130,15 +141,11 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
         product_name: rec.product_name 
       };
 
-      if (rec.id) {
-        await supabase.from('daily_records').update(payload).eq('id', rec.id);
-      } else {
-        await supabase.from('daily_records').insert({
-          ...payload,
-          shop_id: appUser?.shop_id, 
-          date
-        });
-      }
+      await supabase.from('daily_records').insert({
+        ...payload,
+        shop_id: appUser?.shop_id, 
+        date
+      });
     }
     await loadTodayRows();
     await loadMonthlyResults();
@@ -155,7 +162,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     
     const ck = parseMoney(newCK);
     const tm = parseMoney(newTM);
-    const { value: kt } = calcKT(ck, tm);
+    const { value: kt } = calcKT(ck, tm, record.accounting_amount);
 
     const { error } = await supabase.from('daily_records').update({
       product_name: newName,
@@ -189,146 +196,136 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   const pct = monthTarget > 0 ? Math.min((monthTotalKT / monthTarget) * 100, 100) : 0;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
 
-      {/* ===== NHẬP LIỆU HÀNG NGÀY ===== */}
-      <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-        <div className="bg-blue-600 px-6 py-4 flex justify-between items-center text-white">
-          <h2 className="font-bold text-lg flex items-center gap-2">📝 Nhập Liệu</h2>
+      {/* ===== NHẬP LIỆU DẠNG DÒNG (DENSE LAYOUT) ===== */}
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="bg-blue-600 px-4 py-3 flex justify-between items-center text-white">
+          <h2 className="font-bold text-sm uppercase tracking-wide">📝 Nhập Liệu</h2>
           <input
             type="date" value={date}
             onChange={e => setDate(e.target.value)}
-            className="bg-white/20 border border-white/30 rounded-xl px-3 py-1 text-sm outline-none"
+            className="bg-white/20 border border-white/30 rounded-lg px-2 py-0.5 text-xs outline-none"
           />
         </div>
 
-        <div className="p-4 md:p-6 space-y-4">
-          {inputRows.map((rec, i) => {
-            const { value: kt } = calcKT(rec.transfer, rec.cash, rec.accounting_amount);
-            const isSavingThis = saving === i;
-            return (
-              <div key={i} className="bg-gray-50 rounded-2xl p-4 border border-gray-200 space-y-3 relative">
-                <div className="flex flex-col md:flex-row gap-3">
-                  <div className="flex-1">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 ml-1 mb-1 block">Tên mặt hàng</label>
+        <div className="p-2 md:p-4">
+          <div className="space-y-2">
+            {inputRows.map((rec, i) => {
+              const { value: kt } = calcKT(rec.transfer, rec.cash, rec.accounting_amount);
+              const isSavingThis = saving === i;
+              return (
+                <div key={i} className="flex flex-col gap-1 pb-3 border-b border-gray-100 last:border-0 last:pb-0">
+                  {/* Dòng 1: Tên hàng + Mẫu KT cũ */}
+                  <div className="flex gap-2">
                     <input
                       type="text" value={rec.product_name}
                       onChange={e => updateRow(i, 'product_name', e.target.value)}
-                      placeholder="Nhập tên..."
-                      className="w-full bg-white border border-gray-200 rounded-xl px-4 py-3 font-semibold text-gray-800 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="Tên hàng..."
+                      className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-bold text-gray-800 text-sm outline-none focus:border-blue-500"
                     />
+                    <div className="w-24 bg-blue-50/50 border border-blue-100 rounded-lg px-2 py-2 text-center">
+                      <span className="text-[9px] text-blue-500 font-bold block leading-none mb-1">KT CŨ</span>
+                      <input 
+                        type="text" value={fmt(rec.accounting_amount)} 
+                        onChange={e => updateRow(i, 'accounting_amount', parseMoney(e.target.value))}
+                        className="w-full bg-transparent text-center font-bold text-blue-700 text-xs outline-none"
+                      />
+                    </div>
                   </div>
-                  <div className="md:w-32">
-                    <label className="text-[10px] uppercase font-bold text-gray-400 ml-1 mb-1 block">Mẫu KT cũ</label>
-                    <input
-                      type="text" value={fmt(rec.accounting_amount)}
-                      onChange={e => updateRow(i, 'accounting_amount', parseMoney(e.target.value))}
-                      className="w-full bg-blue-50 border border-blue-100 rounded-xl px-4 py-3 font-bold text-blue-700 text-sm text-center outline-none"
-                    />
+
+                  {/* Dòng 2: CK + TM + LƯU */}
+                  <div className="flex gap-2 items-center">
+                    <div className="flex-1 grid grid-cols-2 gap-2">
+                      <div className="relative">
+                        <span className="absolute left-2 top-1.5 text-[8px] text-gray-400 font-bold">CK</span>
+                        <input
+                          type="text" inputMode="numeric"
+                          value={fmt(rec.transfer)}
+                          onChange={e => updateRow(i, 'transfer', parseMoney(e.target.value))}
+                          className="w-full bg-white border border-gray-200 rounded-lg pl-2 pr-2 pt-3 pb-1 text-right font-black text-gray-800 text-sm outline-none focus:border-blue-500"
+                        />
+                      </div>
+                      <div className="relative">
+                        <span className="absolute left-2 top-1.5 text-[8px] text-gray-400 font-bold">TM</span>
+                        <input
+                          type="text" inputMode="numeric"
+                          value={fmt(rec.cash)}
+                          onChange={e => updateRow(i, 'cash', parseMoney(e.target.value))}
+                          className="w-full bg-white border border-gray-200 rounded-lg pl-2 pr-2 pt-3 pb-1 text-right font-black text-gray-800 text-sm outline-none focus:border-blue-500"
+                        />
+                      </div>
+                    </div>
+                    
+                    <button
+                      onClick={() => doSave(i)}
+                      disabled={isSavingThis}
+                      className="bg-blue-600 text-white w-14 h-10 rounded-lg font-bold text-xs shadow-md active:scale-95 disabled:opacity-50 shrink-0"
+                    >
+                      {isSavingThis ? '...' : 'Lưu'}
+                    </button>
                   </div>
                 </div>
+              );
+            })}
+          </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="bg-white p-3 rounded-xl border border-gray-200">
-                    <label className="text-[10px] text-gray-400 block mb-1">CK (VND)</label>
-                    <input
-                      type="text" inputMode="numeric"
-                      value={fmt(rec.transfer)}
-                      onChange={e => updateRow(i, 'transfer', parseMoney(e.target.value))}
-                      className="w-full text-right font-black text-gray-800 text-base outline-none"
-                    />
-                  </div>
-                  <div className="bg-white p-3 rounded-xl border border-gray-200">
-                    <label className="text-[10px] text-gray-400 block mb-1">Tiền mặt (VND)</label>
-                    <input
-                      type="text" inputMode="numeric"
-                      value={fmt(rec.cash)}
-                      onChange={e => updateRow(i, 'cash', parseMoney(e.target.value))}
-                      className="w-full text-right font-black text-gray-800 text-base outline-none"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-between pt-1">
-                  <div>
-                    <span className="text-[10px] text-green-600 font-bold uppercase block">Mẫu KT mới</span>
-                    <span className="text-lg font-black text-green-700">{fmt(kt)} đ</span>
-                  </div>
-                  <button
-                    onClick={() => doSave(i)}
-                    disabled={isSavingThis}
-                    className="bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-lg shadow-blue-200 active:scale-95 transition-transform disabled:opacity-50"
-                  >
-                    {isSavingThis ? '...' : 'Lưu'}
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-
-          <div className="flex gap-3 mt-4">
+          <div className="flex gap-2 mt-4">
             <button
               onClick={addEmptyRow}
-              className="flex-1 bg-white border-2 border-dashed border-gray-300 text-gray-500 rounded-2xl py-4 font-bold text-sm hover:border-blue-400 hover:text-blue-500 transition-colors"
+              className="flex-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-xl py-2.5 font-bold text-xs hover:bg-gray-100"
             >
-              + Thêm dòng
+              + Dòng mới
             </button>
             <button
               onClick={doSaveAll}
               disabled={savingAll}
-              className="flex-[1.5] bg-blue-700 text-white rounded-2xl py-4 font-black text-sm shadow-xl shadow-blue-200 active:scale-95 transition-all"
+              className="flex-1 bg-blue-700 text-white rounded-xl py-2.5 font-black text-xs shadow-lg active:scale-95 disabled:opacity-50"
             >
-              {savingAll ? 'Đang tải...' : '💾 LƯU TẤT CẢ'}
+              {savingAll ? 'Đang lưu...' : 'LƯU TẤT CẢ'}
             </button>
           </div>
         </div>
       </div>
 
       {/* ===== KẾT QUẢ THÁNG (Bảng 5 cột) ===== */}
-      <div className="bg-white rounded-3xl shadow-xl border border-gray-100 overflow-hidden">
-        <div className="bg-gray-800 px-6 py-4 flex justify-between items-center text-white">
-          <h2 className="font-bold text-lg">📊 Bảng Kết Quả Tháng {currentMonth.replace('-', '/')}</h2>
+      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+        <div className="bg-gray-800 px-4 py-3 flex justify-between items-center text-white">
+          <h1 className="font-bold text-xs uppercase">📊 Kết Quả Tháng {currentMonth.replace('-', '/')}</h1>
           <div className="text-right">
-             <div className="text-[10px] text-gray-400 uppercase">Tổng KT</div>
-             <div className="font-black text-green-400">{fmt(monthTotalKT)}đ</div>
+             <div className="font-black text-green-400 text-sm">{fmt(monthTotalKT)}đ</div>
           </div>
         </div>
 
-        {/* Bảng kết quả */}
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-gray-50 text-[10px] uppercase font-bold text-gray-400 border-b border-gray-100">
-                <th className="px-4 py-3">Ngày</th>
-                <th className="px-4 py-3">Tên Hàng</th>
-                <th className="px-4 py-3 text-right">CK</th>
-                <th className="px-4 py-3 text-right">TM</th>
-                <th className="px-4 py-3 text-right text-green-600">Mẫu KT</th>
-                {isAdmin && <th className="px-4 py-3 text-center">Sửa</th>}
+              <tr className="bg-gray-50 text-[10px] uppercase font-bold text-gray-400 border-b border-gray-100 whitespace-nowrap">
+                <th className="px-3 py-2">Ngày</th>
+                <th className="px-3 py-2">Hàng</th>
+                <th className="px-3 py-2 text-right">CK</th>
+                <th className="px-3 py-2 text-right">TM</th>
+                <th className="px-3 py-2 text-right text-green-600">KT</th>
+                {isAdmin && <th className="px-3 py-2 text-center">Sửa</th>}
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50 text-sm">
+            <tbody className="divide-y divide-gray-50 text-xs">
               {monthlyRecords.length === 0 ? (
                 <tr>
-                  <td colSpan={isAdmin ? 6 : 5} className="text-center py-10 text-gray-400">Chưa có dữ liệu</td>
+                  <td colSpan={isAdmin ? 6 : 5} className="text-center py-6 text-gray-400 italic">Chưa có dữ liệu</td>
                 </tr>
               ) : monthlyRecords.map((r) => (
-                <tr key={r.id} className="hover:bg-blue-50/50 transition-colors">
-                  <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                <tr key={r.id} className="active:bg-blue-50 transition-colors">
+                  <td className="px-3 py-2 text-gray-500">
                     {new Date(r.date + 'T00:00:00').toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
                   </td>
-                  <td className="px-4 py-3 font-semibold text-gray-800">{r.product_name}</td>
-                  <td className="px-4 py-3 text-right font-medium">{fmt(r.transfer)}</td>
-                  <td className="px-4 py-3 text-right font-medium">{fmt(r.cash)}</td>
-                  <td className="px-4 py-3 text-right font-black text-green-700">{fmt(r.accounting_amount)}</td>
+                  <td className="px-3 py-2 font-semibold text-gray-700 max-w-[80px] truncate">{r.product_name}</td>
+                  <td className="px-3 py-2 text-right">{fmt(r.transfer)}</td>
+                  <td className="px-3 py-2 text-right">{fmt(r.cash)}</td>
+                  <td className="px-3 py-2 text-right font-bold text-green-700">{fmt(r.accounting_amount)}</td>
                   {isAdmin && (
-                    <td className="px-4 py-3 text-center">
-                      <button 
-                        onClick={() => handleEditRecord(r)}
-                        className="p-2 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors"
-                      >
-                        ✏️
-                      </button>
+                    <td className="px-3 py-2 text-center">
+                      <button onClick={() => handleEditRecord(r)} className="p-1 opacity-70">✏️</button>
                     </td>
                   )}
                 </tr>
