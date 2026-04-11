@@ -127,16 +127,32 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   };
 
   const handleEditRecord = async (record: any) => {
+    const newDate = prompt("Ngày (Định dạng YYYY-MM-DD):", record.date);
+    if (!newDate) return;
     const name = prompt("Tên hàng:", record.product_name);
     if (!name) return;
     const ckVal = prompt("Số tiền CK:", String(record.transfer));
     const cashVal = prompt("Số tiền TM:", String(record.cash));
     if (ckVal === null || cashVal === null) return;
+    
     const ck = parseMoney(ckVal);
     const tm = parseMoney(cashVal);
+    // Tính lại KT dựa trên số tiền mới
     const { value: kt } = calcKT(ck, tm, record.accounting_amount);
-    const { error } = await supabase.from('daily_records').update({ product_name: name, transfer: ck, cash: tm, accounting_amount: kt }).eq('id', record.id);
-    if (!error) await loadMonthlyResults();
+
+    const { error } = await supabase.from('daily_records').update({ 
+      date: newDate,
+      product_name: name, 
+      transfer: ck, 
+      cash: tm, 
+      accounting_amount: kt 
+    }).eq('id', record.id);
+    
+    if (!error) {
+      await loadMonthlyResults();
+    } else {
+      alert("Lỗi khi sửa: " + error.message);
+    }
   };
 
   const updateRow = (index: number, field: keyof Row, val: any) => {
