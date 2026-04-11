@@ -36,35 +36,8 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   }, [appUser, date]);
 
   const loadTodayRows = async () => {
-    if (!appUser?.shop_id) return;
-    const { data: todayData } = await supabase
-      .from('daily_records').select('*')
-      .eq('shop_id', appUser.shop_id).eq('date', date);
-
-    if (todayData && todayData.length > 0) {
-      setInputRows(todayData.map(r => ({ ...r })));
-      return;
-    }
-
-    // Gợi ý từ ngày gần nhất: Lấy cả Tên hàng và Mẫu KT cũ
-    const { data: recentData } = await supabase
-      .from('daily_records').select('product_name, accounting_amount, date')
-      .eq('shop_id', appUser.shop_id).lt('date', date)
-      .order('date', { ascending: false }).limit(30);
-
-    if (recentData && recentData.length > 0) {
-      const latestDate = recentData[0].date;
-      const suggestions = recentData.filter(r => r.date === latestDate);
-      setInputRows(suggestions.map(s => ({
-        product_name: s.product_name, 
-        cash: 0, 
-        transfer: 0, 
-        accounting_amount: s.accounting_amount || 0, // Lấy mẫu KT trước đó
-        isNew: true
-      })));
-    } else {
-      setInputRows([{ product_name: '', cash: 0, transfer: 0, accounting_amount: 0, isNew: true }]);
-    }
+    // Không nạp dữ liệu cũ vào ô nhập liệu nữa, bắt đầu bằng 1 dòng trống
+    setInputRows([{ product_name: '', cash: 0, transfer: 0, accounting_amount: 0, isNew: true }]);
   };
 
   const loadMonthlyResults = async () => {
@@ -90,18 +63,28 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   const doSave = async (index: number) => {
     const rec = inputRows[index];
     if (!rec.product_name.trim()) { alert('Nhập tên hàng hóa!'); return; }
-    setSaving(index);
-    const { value: kt, warn } = calcKT(rec.transfer, rec.cash, rec.accounting_amount);
+    if (rec.cash === 0 && rec.transfer === 0) { alert('Nhập số tiền!'); return; }
     
-    const payload = { 
+    setSaving(index);
+    
+    // Tìm Mẫu KT gần nhất của mặt hàng này để tính toán
+    const { data: lastRec } = await supabase
+      .from('daily_records')
+      .select('accounting_amount')
+      .eq('product_name', rec.product_name)
+      .eq('shop_id', appUser?.shop_id)
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single();
+
+    const lastKT = lastRec?.accounting_amount || 0;
+    const { value: kt, warn } = calcKT(rec.transfer, rec.cash, lastKT);
+    
+    const { data: ins, error: saveErr } = await supabase.from('daily_records').insert({
       cash: rec.cash, 
       transfer: rec.transfer, 
       accounting_amount: kt,
-      product_name: rec.product_name 
-    };
-
-    const { data: ins, error: saveErr } = await supabase.from('daily_records').insert({
-      ...payload,
+      product_name: rec.product_name,
       shop_id: appUser?.shop_id, 
       date
     }).select().single();
@@ -109,14 +92,12 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     if (saveErr) {
        alert('Lỗi lưu: ' + saveErr.message);
     } else {
-      // RESET LUỒNG: Sau khi lưu xong, đưa dòng này về trạng thái mới 
-      // Nhưng giữ lại tên mặt hàng cho lần nhập tiếp theo
       const nr = [...inputRows];
       nr[index] = { 
         product_name: rec.product_name, 
         cash: 0, 
         transfer: 0, 
-        accounting_amount: ins.accounting_amount, // Giữ mẫu KT vừa lưu làm gợi ý kế tiếp
+        accounting_amount: ins.accounting_amount,
         isNew: true 
       };
       setInputRows(nr);
@@ -133,17 +114,19 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       const rec = inputRows[i];
       if (!rec.product_name.trim() || (rec.cash === 0 && rec.transfer === 0)) continue;
       
-      const { value: kt } = calcKT(rec.transfer, rec.cash, rec.accounting_amount);
-      const payload = { 
-        cash: rec.cash, 
-        transfer: rec.transfer, 
-        accounting_amount: kt,
-        product_name: rec.product_name 
-      };
+      const { data: lastRec } = await supabase
+        .from('daily_records').select('accounting_amount')
+        .eq('product_name', rec.product_name).eq('shop_id', appUser?.shop_id)
+        .order('created_at', { ascending: false }).limit(1).single();
+
+      const { value: kt } = calcKT(rec.transfer, rec.cash, lastRec?.accounting_amount || 0);
 
       await supabase.from('daily_records').insert({
-        ...payload,
-        shop_id: appUser?.shop_id, 
+        cash: rec.cash,
+        transfer: rec.transfer,
+        accounting_amount: kt,
+        product_name: rec.product_name,
+        shop_id: appUser?.shop_id,
         date
       });
     }
@@ -221,17 +204,9 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                     <input
                       type="text" value={rec.product_name}
                       onChange={e => updateRow(i, 'product_name', e.target.value)}
-                      placeholder="Tên hàng..."
+                      placeholder="Tên hàng hóa..."
                       className="flex-1 bg-gray-50 border border-gray-200 rounded-lg px-3 py-2 font-bold text-gray-800 text-sm outline-none focus:border-blue-500"
                     />
-                    <div className="w-24 bg-blue-50/50 border border-blue-100 rounded-lg px-2 py-2 text-center">
-                      <span className="text-[9px] text-blue-500 font-bold block leading-none mb-1">KT CŨ</span>
-                      <input 
-                        type="text" value={fmt(rec.accounting_amount)} 
-                        onChange={e => updateRow(i, 'accounting_amount', parseMoney(e.target.value))}
-                        className="w-full bg-transparent text-center font-bold text-blue-700 text-xs outline-none"
-                      />
-                    </div>
                   </div>
 
                   {/* Dòng 2: CK + TM + LƯU */}
