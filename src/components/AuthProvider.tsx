@@ -15,6 +15,7 @@ type AppUser = {
 type Shop = {
   id: string;
   name: string;
+  store_code: string;
   expire_at: string;
   is_active: boolean;
 };
@@ -45,101 +46,87 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const router = useRouter();
 
   useEffect(() => {
-    let mounted = true;
-
-    const fetchUserData = async (authUser: User) => {
-      try {
-        const { data: userData, error: userError } = await supabase
-          .from('users')
-          .select('*')
-          .eq('id', authUser.id)
-          .single();
-        
-        if (userError || !userData) {
-          if (mounted) {
-            setAppUser(null);
-            setShop(null);
-          }
-          // If the user's DB row is wiped, force logout to reset state
-          await supabase.auth.signOut();
-          return;
-        }
-
-        if (!mounted) return;
-        setAppUser(userData as AppUser);
-
-        if (userData.role === 'super_admin' && !userData.shop_id) {
-          setShop(null);
-          return;
-        }
-
-        const { data: shopData, error: shopError } = await supabase
-          .from('shops')
-          .select('*')
-          .eq('id', userData.shop_id)
-          .single();
-
-        if (shopError || !shopData) {
-          if (mounted) setShop(null);
-          return;
-        }
-
-        if (mounted) setShop(shopData as Shop);
-
-        if (userData.role !== 'super_admin' && (new Date(shopData.expire_at) < new Date() || !shopData.is_active)) {
-          router.push('/blocked');
-        }
-      } catch (err) {
-        console.error("fetchUserData error", err);
-      }
-    };
-
-    const initAuth = async () => {
-      try {
-        const { data, error } = await supabase.auth.getSession();
-        if (error) throw error;
-        
-        if (data?.session?.user) {
-          if (mounted) setUser(data.session.user);
-          await fetchUserData(data.session.user);
-        } else {
-          if (mounted) setUser(null);
-        }
-      } catch (err) {
-        console.error("getSession error", err);
-        if (mounted) setUser(null);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    };
-
-    initAuth();
-
+    // Listen to auth state changes only - onAuthStateChange fires INITIAL_SESSION on load
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
-        const currentUser = session?.user || null;
-        if (mounted) setUser(currentUser);
-        
-        if (currentUser) {
-          await fetchUserData(currentUser);
-        } else {
-          if (mounted) {
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+
+        if (!currentUser) {
+          setAppUser(null);
+          setShop(null);
+          setLoading(false);
+          return;
+        }
+
+        // Fetch user profile from DB
+        try {
+          const { data: userData } = await supabase
+            .from('users')
+            .select('*')
+            .eq('id', currentUser.id)
+            .single();
+
+          if (!userData) {
+            // No profile found → sign out and redirect
+            await supabase.auth.signOut();
             setAppUser(null);
             setShop(null);
+            setLoading(false);
+            return;
           }
+
+          setAppUser(userData as AppUser);
+
+          // super_admin has no shop
+          if (userData.role === 'super_admin') {
+            setShop(null);
+            setLoading(false);
+            return;
+          }
+
+          // Fetch shop
+          if (userData.shop_id) {
+            const { data: shopData } = await supabase
+              .from('shops')
+              .select('*')
+              .eq('id', userData.shop_id)
+              .single();
+
+            if (shopData) {
+              setShop(shopData as Shop);
+              // Check expiry
+              if (!shopData.is_active || new Date(shopData.expire_at) < new Date()) {
+                setLoading(false);
+                router.push('/blocked');
+                return;
+              }
+            } else {
+              setShop(null);
+            }
+          }
+        } catch (err) {
+          console.error('AuthProvider error:', err);
+          setAppUser(null);
+          setShop(null);
+        } finally {
+          setLoading(false);
         }
-        if (mounted) setLoading(false);
       }
     );
 
     return () => {
-      mounted = false;
       authListener.subscription.unsubscribe();
     };
   }, [router]);
 
   const signOut = async () => {
+    setLoading(true);
     await supabase.auth.signOut();
+    setUser(null);
+    setAppUser(null);
+    setShop(null);
+    setLoading(false);
     router.push('/login');
   };
 

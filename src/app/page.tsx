@@ -23,7 +23,7 @@ export default function DashboardPage() {
   }, [user, loading, router]);
 
   useEffect(() => {
-    if (appUser && appUser.role !== 'super_admin') {
+    if (appUser && appUser.role !== 'super_admin' && appUser.shop_id) {
       fetchSettings();
     }
   }, [appUser]);
@@ -34,20 +34,18 @@ export default function DashboardPage() {
     if (data) setSettings(data);
   };
 
-  if (loading || !user) {
-    if (!loading && !user) {
-       // Force navigation bypassing Next router cache
-       if (typeof window !== 'undefined') window.location.href = '/login';
-    }
+  if (loading) {
     return (
-      <div className="p-8 text-center text-gray-500 font-medium">
-        Đang tải dữ liệu... <br />
-        <span className="text-xs text-red-500 mt-4 block">
-          Debug: [Loading: {loading ? 'Yes' : 'No'} | User: {user ? 'Yes' : 'No'}]
-        </span>
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-10 w-10 animate-spin rounded-full border-4 border-blue-600 border-t-transparent"></div>
+          <p className="text-gray-500 font-medium">Đang tải dữ liệu...</p>
+        </div>
       </div>
     );
   }
+
+  if (!user) return null;
 
   if (appUser?.role === 'super_admin') {
     return (
