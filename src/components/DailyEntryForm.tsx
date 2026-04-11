@@ -255,37 +255,49 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                     </td>
                     
                     {isEditing ? (
-                      <>
-                        <td className="px-1 py-1">
-                          <input 
-                            type="text" 
-                            value={editFormData.date} 
-                            onChange={e => setEditFormData({...editFormData, date: e.target.value})} 
-                            className="w-[100px] border border-blue-400 rounded px-2 py-2 text-sm bg-white focus:scale-110 focus:text-base focus:shadow-2xl focus:z-50 relative transition-all outline-none" 
-                          />
-                        </td>
-                        <td className="px-1 py-1">
-                          <input 
-                            type="text" 
-                            value={editFormData.product_name} 
-                            onChange={e => setEditFormData({...editFormData, product_name: e.target.value})} 
-                            className="w-full border border-blue-300 rounded px-2 py-2 font-bold text-sm bg-white focus:scale-125 focus:shadow-xl focus:z-50 relative transition-all outline-none min-w-[120px]" 
-                          />
-                        </td>
-                        <td className="px-1 py-1">
-                          <input 
-                            type="text" 
-                            value={fmt(editFormData.transfer)} 
-                            onChange={e => setEditFormData({...editFormData, transfer: parseMoney(e.target.value)})} 
-                            className="w-full border border-blue-300 rounded px-1 py-2 text-right font-black text-sm bg-white focus:scale-110 focus:shadow-xl focus:z-50 relative transition-all outline-none" 
-                          />
-                        </td>
-                        <td className="px-1 py-1 text-right font-bold text-green-600">Auto</td>
-                        <td className="px-1 py-1 text-center flex gap-1 justify-center items-center h-full pt-1">
-                           <button onClick={handleSaveEdit} className="text-xl active:scale-95">✅</button>
-                           <button onClick={() => setEditingId(null)} className="text-xl active:scale-95">❌</button>
-                        </td>
-                      </>
+                      <td colSpan={isAdmin ? 6 : 5} className="p-3 bg-blue-50 rounded-xl border-2 border-blue-200">
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-[10px] font-bold text-blue-600 uppercase">Chỉnh sửa bản ghi</span>
+                            <button onClick={() => setEditingId(null)} className="text-gray-400 text-lg">✕</button>
+                          </div>
+                          
+                          <div>
+                            <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1">Ngày (Năm-Tháng-Ngày)</label>
+                            <input 
+                              type="text" 
+                              value={editFormData.date} 
+                              onChange={e => setEditFormData({...editFormData, date: e.target.value})} 
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-blue-500 font-bold" 
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1">Tên hàng hóa</label>
+                            <input 
+                              type="text" 
+                              value={editFormData.product_name} 
+                              onChange={e => setEditFormData({...editFormData, product_name: e.target.value})} 
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-blue-500 font-black" 
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-bold text-gray-400 uppercase mb-1">Tiền chuyển khoản (CK)</label>
+                            <input 
+                              type="text" 
+                              value={fmt(editFormData.transfer)} 
+                              onChange={e => setEditFormData({...editFormData, transfer: parseMoney(e.target.value)})} 
+                              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-blue-500 font-bold text-right" 
+                            />
+                          </div>
+
+                          <div className="flex gap-2 pt-1">
+                            <button onClick={handleSaveEdit} className="flex-1 bg-blue-600 text-white py-2 rounded-lg font-bold text-sm shadow-md active:scale-95">LƯU THAY ĐỔI</button>
+                            <button onClick={() => setEditingId(null)} className="flex-1 bg-gray-200 text-gray-600 py-2 rounded-lg font-bold text-sm active:scale-95">HỦY</button>
+                          </div>
+                        </div>
+                      </td>
                     ) : (
                       <>
                         <td className="px-1 py-2 text-gray-400 text-[9px]">{new Date(r.date + 'T00:00:00').toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</td>
