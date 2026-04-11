@@ -103,10 +103,38 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
 
   if (appUser?.role !== 'admin') return null;
 
+  const formatCurrencyDisplay = (val: number) => {
+    if (!val) return '0 đ';
+    return new Intl.NumberFormat('vi-VN').format(val) + ' đ';
+  };
+
   return (
     <div className="space-y-6 mt-6">
       <div className="bg-white p-6 rounded-xl border border-gray-100 shadow-sm">
         <h2 className="text-xl font-bold mb-4">Cấu Hình Shop & Giới Hạn</h2>
+
+        {/* Current config summary */}
+        {(settings?.min_kt || settings?.max_kt || settings?.yearly_kt_limit) && (
+          <div className="mb-6 rounded-xl bg-blue-50 border border-blue-100 p-4">
+            <h3 className="text-sm font-bold text-blue-700 mb-3 uppercase tracking-wide">Cấu hình hiện tại</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="bg-white rounded-lg p-3 border border-blue-100 text-center">
+                <div className="text-xs text-gray-500 mb-1">Giới Hạn Tối Thiểu</div>
+                <div className="font-bold text-blue-700 text-lg">{formatCurrencyDisplay(settings.min_kt)}</div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-blue-100 text-center">
+                <div className="text-xs text-gray-500 mb-1">Giới Hạn Tối Đa</div>
+                <div className="font-bold text-blue-700 text-lg">{formatCurrencyDisplay(settings.max_kt)}</div>
+              </div>
+              <div className="bg-white rounded-lg p-3 border border-red-100 text-center">
+                <div className="text-xs text-gray-500 mb-1">Tổng Năm (÷12/tháng)</div>
+                <div className="font-bold text-red-600 text-lg">{formatCurrencyDisplay(settings.yearly_kt_limit)}</div>
+                <div className="text-xs text-gray-400">{formatCurrencyDisplay(Math.round(settings.yearly_kt_limit / 12))}/tháng</div>
+              </div>
+            </div>
+            <div className="mt-2 text-xs text-gray-500 text-center">Tên shop: <span className="font-semibold text-gray-700">{shopName || shop?.name}</span></div>
+          </div>
+        )}
         
         <form onSubmit={handleSaveSettings} className="grid grid-cols-1 md:grid-cols-2 gap-6 pb-6">
           <div className="md:col-span-2">
