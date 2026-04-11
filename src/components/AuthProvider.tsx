@@ -7,8 +7,8 @@ import { useRouter } from 'next/navigation';
 
 type AppUser = {
   id: string;
-  shop_id: string;
-  role: 'admin' | 'manager' | 'user';
+  shop_id: string | null;
+  role: 'super_admin' | 'admin' | 'manager' | 'user';
   email: string;
 };
 
@@ -62,6 +62,12 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
       setAppUser(userData as AppUser);
 
+      // Super admin might not have a shop
+      if (userData.role === 'super_admin' && !userData.shop_id) {
+        setShop(null);
+        return;
+      }
+
       // 2. Get shop details
       const { data: shopData, error: shopError } = await supabase
         .from('shops')
@@ -77,9 +83,8 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
 
       setShop(shopData as Shop);
 
-      // Check if shop is expired
-      if (new Date(shopData.expire_at) < new Date() || !shopData.is_active) {
-        // Handle blocked access logic here if needed (e.g., redirect to blocked page)
+      // Check if shop is expired (Skip for super admin)
+      if (userData.role !== 'super_admin' && (new Date(shopData.expire_at) < new Date() || !shopData.is_active)) {
         router.push('/blocked');
       }
     };

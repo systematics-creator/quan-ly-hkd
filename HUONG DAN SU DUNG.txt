@@ -1,0 +1,47 @@
+Hướng Dẫn Sử Dụng SaaS Quản Lý Hộ Kinh Doanh
+Chào mừng bạn đến với ứng dụng quản lý SaaS! Sau khi đã cấu hình xong website lên mạng, bạn cần phải thực hiện thiết lập tài khoản Quản trị đầu tiên để có thể đăng nhập. Dưới đây là quy trình cụ thể:
+
+1. Cách Tạo Tài Khoản Super Admin Lần Đầu
+Vì đây là nền tảng quản lý bí mật cho các Shop, chức năng "Tự do đăng ký (Sign up)" ở ngoài giao diện đã bị ẩn để ngăn người lạ xâm nhập. Bạn (với tư cách là Chủ hệ thống toàn quyền) phải tự tay tạo account ở trong Database.
+
+Các bước thực hiện trên Supabase:
+
+Truy cập vào giao diện web của Supabase.
+Chọn dự án của bạn -> vào mục Authentication (biểu tượng hình người) -> Chọn tab Users.
+Bấm nút Add User -> Create new user.
+Nhập Email (ví dụ: admin@gmail.com) và Mật khẩu (ví dụ: 123456) -> Auto Confirm Email -> Bấm Create user.
+Nhấn copy User ID (đó là một chuỗi ký tự dài e.g., abc123xx-....).
+2. Tạo Không Gian Cho Shop (Hộ Kinh Doanh)
+Tiếp theo, tài khoản vừa tạo cần được gắn với một cái "Shop".
+
+Ở Supabase, vào mục Table Editor (biểu tượng bảng lưới).
+Bấm vào bảng shops -> Bấm nút Insert row.
+name: Điền tên shop (VD: Cửa Hàng Yến Sào)
+expire_at: Điền ngày hết hạn sử dụng (VD: 2027-01-01 00:00:00)
+Bấm Save.
+Quay ra màn hình chính, copy ID của cái Cửa hàng bạn vừa tạo.
+Gắn Users vào Shops & Cấp Quyền Giám Đốc (Super Admin)
+
+Chọn tiếp bảng users (dưới mục Table Editor) -> Bấm Insert row.
+id: Dán cai UUID của Admin User mà bạn nãy vừa tạo ở mục Auth.
+shop_id: Dán cái UUID của Cửa Hàng bạn vừa tạo.
+role: Gõ vào admin (Vô cùng quan trọng để có toàn bộ quyền lực).
+email: admin@gmail.com
+Bấm Save.
+3. Bắt Đầu Đăng Nhập Và Sử Dụng Website
+Bây giờ hệ thống dữ liệu của bạn đã có cả người lẫn cửa hàng.
+
+Mở trang URL Vercel của bạn lên.
+Hệ thống sẽ bật tường bảo vệ và tự động đuổi bạn ra trang Login (/login).
+Điền Email: admin@gmail.com và Mật số: 123456.
+Bấm Sign In.
+🌟 Hệ thống giao diện làm gì tiếp theo?
+Ngay sau khi bạn login, hệ thống ngầm đối chiếu xem tài khoản có gắn với Cửa Hàng nào không.
+Nó tự động chạy qua một bộ đếm: Cửa hàng này đã quá ngày hết hạn (expire_at) chưa? Cửa hàng có đang bị vô hiệu hóa (is_active = false) không? Nếu có, hệ thống lập tức đá bạn bay ra trang Access Denied (Bị Khóa).
+Nếu mọi thứ ổn, bạn sẽ được đưa vào Dashboard:
+Dành cho nhân viên (user): Chỉ nhìn thấy duy nhất Form nhập thu chi hàng ngày.
+Dành cho Giám đốc (admin) / Quản lý (manager): Sẽ thấy xuất hiện thêm cả khu vực cấu hình Doanh Thu Theo Tháng/Năm và các nút chỉnh sửa thiết lập.
+Toàn bộ con số Thu Chi sẽ được tự tính qua thuật toán kiểm duyệt an toàn trước khi đẩy vô DataBase.
+Một Số Chú Ý Cho Tương Lai:
+Để cung cấp tài khoản cho 1 cửa hàng mới, bạn chỉ việc vô Supabase nạp record cho bảng shops, users. Quá trình này sẽ vô cùng bảo mật!
+Nếu cửa hàng nào đến tháng mà KHÔNG ĐÓNG TIỀN, bạn chỉ việc nhấn đổi ngày expire_at thành hôm qua. App của họ tự khắc sẽ bị khóa!
