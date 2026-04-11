@@ -214,7 +214,36 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     }]);
   };
 
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const toggleSelectAll = () => {
+    if (selectedIds.length === monthlyRecords.length) setSelectedIds([]);
+    else setSelectedIds(monthlyRecords.map(r => r.id));
+  };
+
+  const toggleSelect = (id: string) => {
+    if (selectedIds.includes(id)) setSelectedIds(selectedIds.filter(x => x !== id));
+    else setSelectedIds([...selectedIds, id]);
+  };
+
+  const doDeleteSelection = async () => {
+    if (selectedIds.length === 0) return;
+    if (!confirm(`Bạn có chắc muốn xóa ${selectedIds.length} bản ghi đã chọn?`)) return;
+    
+    const { error } = await supabase.from('daily_records').delete().in('id', selectedIds);
+    if (error) alert('Lỗi xóa: ' + error.message);
+    else {
+      setSelectedIds([]);
+      await loadMonthlyResults();
+    }
+  };
+
   const monthTotalKT = monthlyRecords.reduce((s, r) => s + (r.accounting_amount || 0), 0);
+  const yearlyTarget = settings?.yearly_kt_limit || 0;
+  // Giả sử ta tính tiến độ theo năm (thường là cộng dồn các tháng)
+  // Ở đây ta hiển thị tiến độ của riêng tháng này so với định mức 1 tháng (Target / 12)
+  const monthlyTarget = yearlyTarget / 12;
+  const progressPct = monthlyTarget > 0 ? Math.min((monthTotalKT / monthlyTarget) * 100, 100) : 0;
 
   return (
     <div className="space-y-4">
@@ -281,50 +310,48 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
           </div>
 
           <div className="flex gap-2 mt-4">
-            <button
-              onClick={addEmptyRow}
-              className="flex-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-xl py-2.5 font-bold text-xs hover:bg-gray-100"
-            >
-              + Dòng mới
-            </button>
-            <button
-              onClick={doSaveAll}
-              disabled={savingAll}
-              className="flex-1 bg-blue-700 text-white rounded-xl py-2.5 font-black text-xs shadow-lg active:scale-95 disabled:opacity-50"
-            >
-              {savingAll ? 'Đang lưu...' : 'LƯU TẤT CẢ'}
-            </button>
+            <button onClick={addEmptyRow} className="flex-1 bg-gray-50 border border-gray-200 text-gray-500 rounded-xl py-2 font-bold text-xs">+ Dòng mới</button>
+            <button onClick={doSaveAll} disabled={savingAll} className="flex-1 bg-blue-700 text-white rounded-xl py-2 font-black text-xs shadow-lg disabled:opacity-50">{savingAll ? 'Đang lưu...' : 'LƯU TẤT CẢ'}</button>
           </div>
         </div>
       </div>
 
-      {/* ===== KẾT QUẢ THÁNG (Bảng 5 cột) ===== */}
+      {/* ===== KẾT QUẢ THÁNG (Bảng 5 cột + Xóa) ===== */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="bg-gray-800 px-4 py-3 flex justify-between items-center text-white">
-          <div className="flex flex-col">
-            <h1 className="font-bold text-xs uppercase text-gray-400 leading-none">📊 Kết Quả Tháng</h1>
-            <span className="text-[14px] font-black text-white">{currentMonth.replace('-', '/')}</span>
-          </div>
-          <div className="flex gap-3 items-center">
-            <div className="text-right">
-               <div className="font-black text-green-400 text-sm leading-none">{fmt(monthTotalKT)}đ</div>
-               <div className="text-[8px] text-gray-500 font-bold">TỔNG KT</div>
+        <div className="bg-gray-800 px-4 py-3 text-white">
+          <div className="flex justify-between items-center mb-3">
+            <div className="flex flex-col">
+              <h1 className="font-bold text-xs uppercase text-gray-400 leading-none">📊 Kết Quả Tháng {currentMonth.replace('-', '/')}</h1>
+              <div className="font-black text-green-400 text-lg">{fmt(monthTotalKT)}đ</div>
             </div>
-            <button 
-              onClick={exportToExcel}
-              className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-lg active:scale-95 transition-all shadow-md"
-              title="Tải Excel"
-            >
-              📥
-            </button>
+            <div className="flex gap-2">
+              {selectedIds.length > 0 && (
+                <button onClick={doDeleteSelection} className="bg-red-500 text-white px-3 py-1.5 rounded-lg text-[10px] font-bold shadow-sm animate-pulse">
+                  XÓA ({selectedIds.length})
+                </button>
+              )}
+              <button onClick={exportToExcel} className="bg-white/10 hover:bg-white/20 text-white p-2 rounded-lg transition-all">📥</button>
+            </div>
+          </div>
+          
+          {/* Progress Bar Mục tiêu tháng */}
+          <div className="w-full bg-white/10 h-1.5 rounded-full overflow-hidden">
+            <div className="bg-green-500 h-full transition-all duration-500" style={{ width: `${progressPct}%` }}></div>
+          </div>
+          <div className="flex justify-between mt-1 text-[9px] font-bold text-gray-400">
+            <span>Tiến độ tháng: {progressPct.toFixed(1)}%</span>
+            <span>Mục tiêu: {fmt(monthlyTarget)}đ</span>
           </div>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
-              <tr className="bg-gray-50 text-[10px] uppercase font-bold text-gray-400 border-b border-gray-100 whitespace-nowrap">
-                <th className="px-3 py-2">Ngày</th>
+              <tr className="bg-gray-50 text-[10px] uppercase font-bold text-gray-400 border-b border-gray-100">
+                <th className="px-3 py-2 w-8">
+                  <input type="checkbox" checked={selectedIds.length === monthlyRecords.length && monthlyRecords.length > 0} onChange={toggleSelectAll} className="rounded" />
+                </th>
+                <th className="px-1 py-2">Ngày</th>
                 <th className="px-3 py-2">Hàng</th>
                 <th className="px-3 py-2 text-right">CK</th>
                 <th className="px-3 py-2 text-right">TM</th>
@@ -334,12 +361,13 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
             </thead>
             <tbody className="divide-y divide-gray-50 text-xs">
               {monthlyRecords.length === 0 ? (
-                <tr>
-                  <td colSpan={isAdmin ? 6 : 5} className="text-center py-6 text-gray-400 italic">Chưa có dữ liệu</td>
-                </tr>
+                <tr><td colSpan={isAdmin ? 7 : 6} className="text-center py-6 text-gray-400 italic">Chưa có dữ liệu</td></tr>
               ) : monthlyRecords.map((r) => (
-                <tr key={r.id} className="active:bg-blue-50 transition-colors">
-                  <td className="px-3 py-2 text-gray-500">
+                <tr key={r.id} className={`${selectedIds.includes(r.id) ? 'bg-red-50' : 'active:bg-blue-50'} transition-colors`}>
+                  <td className="px-3 py-2">
+                    <input type="checkbox" checked={selectedIds.includes(r.id)} onChange={() => toggleSelect(r.id)} />
+                  </td>
+                  <td className="px-1 py-2 text-gray-500 text-[10px]">
                     {new Date(r.date + 'T00:00:00').toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}
                   </td>
                   <td className="px-3 py-2 font-semibold text-gray-700 max-w-[80px] truncate">{r.product_name}</td>
