@@ -261,7 +261,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                             type="text" 
                             value={editFormData.date} 
                             onChange={e => setEditFormData({...editFormData, date: e.target.value})} 
-                            className="w-full border border-blue-300 rounded px-1 py-2 text-[10px] bg-white focus:scale-110 focus:shadow-xl focus:z-50 relative transition-all outline-none" 
+                            className="w-[100px] border border-blue-400 rounded px-2 py-2 text-sm bg-white focus:scale-110 focus:text-base focus:shadow-2xl focus:z-50 relative transition-all outline-none" 
                           />
                         </td>
                         <td className="px-1 py-1">
