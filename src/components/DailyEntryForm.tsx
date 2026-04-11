@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
+import * as XLSX from 'xlsx';
 
 type Row = {
   id?: string;
@@ -25,7 +26,6 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   const [monthlyRecords, setMonthlyRecords] = useState<any[]>([]);
   const [saving, setSaving] = useState<number | null>(null);
   const [savingAll, setSavingAll] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
   const currentMonth = date.substring(0, 7);
 
   useEffect(() => {
@@ -36,28 +36,64 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   }, [appUser, date]);
 
   const loadTodayRows = async () => {
-    // Không nạp dữ liệu cũ vào ô nhập liệu nữa, bắt đầu bằng 1 dòng trống
+    // Luôn bắt đầu bằng 1 dòng trống cho ngày hiện tại
     setInputRows([{ product_name: '', cash: 0, transfer: 0, accounting_amount: 0, isNew: true }]);
   };
 
   const loadMonthlyResults = async () => {
     if (!appUser?.shop_id) return;
+    // Lọc CHÍNH XÁC theo tháng của ngày đang chọn
+    const firstDay = `${currentMonth}-01`;
+    const lastDay = `${currentMonth}-31`;
+
     const { data } = await supabase
       .from('daily_records').select('*')
       .eq('shop_id', appUser.shop_id)
-      .gte('date', currentMonth + '-01')
-      .order('date', { ascending: false })
-      .order('created_at', { ascending: true });
+      .gte('date', firstDay)
+      .lte('date', lastDay)
+      .order('created_at', { ascending: false }); // Mới nhất lên trên
+
     if (data) setMonthlyRecords(data);
   };
 
-  const calcKT = (transfer: number, cash: number, manualKT?: number) => {
-    if (manualKT !== undefined && manualKT > 0 && transfer === 0 && cash === 0) return { value: manualKT, warn: '' };
-    const base = (transfer || 0) + (cash || 0);
+  const calcKT = (transfer: number, cash: number, prevKT?: number) => {
+    // 1. Logic Random theo CK
+    let result = 0;
+    if (transfer < 1500000) {
+      // 1,800,000 < KT < 2,300,000
+      result = 1800001 + Math.floor(Math.random() * 499999);
+    } else {
+      // 2,300,000 <= KT <= 3,400,000
+      result = 2300000 + Math.floor(Math.random() * 1100001);
+    }
+
+    // 2. Đảm bảo khác kết quả liền kề (nếu trùng thì cộng thêm chút ít)
+    if (Math.abs(result - (prevKT || 0)) < 100) {
+      result += 555;
+    }
+
+    // 3. Ràng buộc bởi Cấu hình (Min/Max)
     const min = settings?.min_kt || 0;
     const max = settings?.max_kt || Infinity;
-    if (base > max) return { value: max, warn: `Tổng vượt mức tối đa ${fmt(max)}đ` };
-    return { value: Math.max(base, min), warn: '' };
+    
+    const finalVal = Math.max(min, Math.min(max, result));
+    return { value: finalVal, warn: '' };
+  };
+
+  const exportToExcel = () => {
+    if (monthlyRecords.length === 0) return;
+    const data = monthlyRecords.map(r => ({
+      'Ngày': new Date(r.date).toLocaleDateString('vi-VN'),
+      'Tên hàng': r.product_name,
+      'Chuyển khoản (CK)': r.transfer,
+      'Tiền mặt (TM)': r.cash,
+      'Mẫu KT': r.accounting_amount
+    }));
+
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Kết quả");
+    XLSX.writeFile(wb, `Bao-cao-thang-${currentMonth}.xlsx`);
   };
 
   const doSave = async (index: number) => {
@@ -67,7 +103,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     
     setSaving(index);
     
-    // Tìm Mẫu KT gần nhất của mặt hàng này để tính toán
+    // Tìm Mẫu KT gần nhất của mặt hàng này
     const { data: lastRec } = await supabase
       .from('daily_records')
       .select('accounting_amount')
@@ -77,8 +113,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       .limit(1)
       .single();
 
-    const lastKT = lastRec?.accounting_amount || 0;
-    const { value: kt, warn } = calcKT(rec.transfer, rec.cash, lastKT);
+    const { value: kt } = calcKT(rec.transfer, rec.cash, lastRec?.accounting_amount);
     
     const { data: ins, error: saveErr } = await supabase.from('daily_records').insert({
       cash: rec.cash, 
@@ -101,7 +136,6 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
         isNew: true 
       };
       setInputRows(nr);
-      if (warn) alert(warn);
     }
 
     await loadMonthlyResults();
@@ -137,14 +171,13 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
 
   const handleEditRecord = async (record: any) => {
     const newName = prompt("Tên hàng hóa:", record.product_name);
-    if (newName === null) return;
-    const newCK = prompt("Tiền chuyển khoản:", record.transfer);
-    if (newCK === null) return;
-    const newTM = prompt("Tiền mặt:", record.cash);
-    if (newTM === null) return;
+    if (!newName) return;
+    const newCK = prompt("Tiền chuyển khoản:", String(record.transfer));
+    const newTM = prompt("Tiền mặt:", String(record.cash));
     
     const ck = parseMoney(newCK);
     const tm = parseMoney(newTM);
+
     const { value: kt } = calcKT(ck, tm, record.accounting_amount);
 
     const { error } = await supabase.from('daily_records').update({
@@ -169,14 +202,12 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       product_name: prevRow?.product_name || '', 
       cash: 0, 
       transfer: 0, 
-      accounting_amount: prevRow?.accounting_amount || 0, 
+      accounting_amount: 0, 
       isNew: true 
     }]);
   };
 
   const monthTotalKT = monthlyRecords.reduce((s, r) => s + (r.accounting_amount || 0), 0);
-  const monthTarget = settings?.yearly_kt_limit ? settings.yearly_kt_limit / 12 : 0;
-  const pct = monthTarget > 0 ? Math.min((monthTotalKT / monthTarget) * 100, 100) : 0;
 
   return (
     <div className="space-y-4">
@@ -195,11 +226,9 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
         <div className="p-2 md:p-4">
           <div className="space-y-2">
             {inputRows.map((rec, i) => {
-              const { value: kt } = calcKT(rec.transfer, rec.cash, rec.accounting_amount);
               const isSavingThis = saving === i;
               return (
                 <div key={i} className="flex flex-col gap-1 pb-3 border-b border-gray-100 last:border-0 last:pb-0">
-                  {/* Dòng 1: Tên hàng + Mẫu KT cũ */}
                   <div className="flex gap-2">
                     <input
                       type="text" value={rec.product_name}
@@ -209,7 +238,6 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                     />
                   </div>
 
-                  {/* Dòng 2: CK + TM + LƯU */}
                   <div className="flex gap-2 items-center">
                     <div className="flex-1 grid grid-cols-2 gap-2">
                       <div className="relative">
@@ -266,9 +294,22 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       {/* ===== KẾT QUẢ THÁNG (Bảng 5 cột) ===== */}
       <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
         <div className="bg-gray-800 px-4 py-3 flex justify-between items-center text-white">
-          <h1 className="font-bold text-xs uppercase">📊 Kết Quả Tháng {currentMonth.replace('-', '/')}</h1>
-          <div className="text-right">
-             <div className="font-black text-green-400 text-sm">{fmt(monthTotalKT)}đ</div>
+          <div className="flex flex-col">
+            <h1 className="font-bold text-xs uppercase text-gray-400 leading-none">📊 Kết Quả Tháng</h1>
+            <span className="text-[14px] font-black text-white">{currentMonth.replace('-', '/')}</span>
+          </div>
+          <div className="flex gap-3 items-center">
+            <div className="text-right">
+               <div className="font-black text-green-400 text-sm leading-none">{fmt(monthTotalKT)}đ</div>
+               <div className="text-[8px] text-gray-500 font-bold">TỔNG KT</div>
+            </div>
+            <button 
+              onClick={exportToExcel}
+              className="bg-green-600 hover:bg-green-700 text-white p-2 rounded-lg active:scale-95 transition-all shadow-md"
+              title="Tải Excel"
+            >
+              📥
+            </button>
           </div>
         </div>
 
