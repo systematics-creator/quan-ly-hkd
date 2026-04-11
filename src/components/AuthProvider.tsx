@@ -45,76 +45,95 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
   const router = useRouter();
 
   useEffect(() => {
+    let mounted = true;
+
     const fetchUserData = async (authUser: User) => {
-      // 1. Get custom user details
-      const { data: userData, error: userError } = await supabase
-        .from('users')
-        .select('*')
-        .eq('id', authUser.id)
-        .single();
-      
-      if (userError || !userData) {
-        console.error('Error fetching user details:', userError);
-        setAppUser(null);
-        setShop(null);
-        return;
-      }
+      try {
+        const { data: userData, error: userError } = await supabase
+          .from('users')
+          .select('*')
+          .eq('id', authUser.id)
+          .single();
+        
+        if (userError || !userData) {
+          if (mounted) {
+            setAppUser(null);
+            setShop(null);
+          }
+          // If the user's DB row is wiped, force logout to reset state
+          await supabase.auth.signOut();
+          return;
+        }
 
-      setAppUser(userData as AppUser);
+        if (!mounted) return;
+        setAppUser(userData as AppUser);
 
-      // Super admin might not have a shop
-      if (userData.role === 'super_admin' && !userData.shop_id) {
-        setShop(null);
-        return;
-      }
+        if (userData.role === 'super_admin' && !userData.shop_id) {
+          setShop(null);
+          return;
+        }
 
-      // 2. Get shop details
-      const { data: shopData, error: shopError } = await supabase
-        .from('shops')
-        .select('*')
-        .eq('id', userData.shop_id)
-        .single();
+        const { data: shopData, error: shopError } = await supabase
+          .from('shops')
+          .select('*')
+          .eq('id', userData.shop_id)
+          .single();
 
-      if (shopError || !shopData) {
-        console.error('Error fetching shop details:', shopError);
-        setShop(null);
-        return;
-      }
+        if (shopError || !shopData) {
+          if (mounted) setShop(null);
+          return;
+        }
 
-      setShop(shopData as Shop);
+        if (mounted) setShop(shopData as Shop);
 
-      // Check if shop is expired (Skip for super admin)
-      if (userData.role !== 'super_admin' && (new Date(shopData.expire_at) < new Date() || !shopData.is_active)) {
-        router.push('/blocked');
+        if (userData.role !== 'super_admin' && (new Date(shopData.expire_at) < new Date() || !shopData.is_active)) {
+          router.push('/blocked');
+        }
+      } catch (err) {
+        console.error("fetchUserData error", err);
       }
     };
+
+    const initAuth = async () => {
+      try {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) throw error;
+        
+        if (data?.session?.user) {
+          if (mounted) setUser(data.session.user);
+          await fetchUserData(data.session.user);
+        } else {
+          if (mounted) setUser(null);
+        }
+      } catch (err) {
+        console.error("getSession error", err);
+        if (mounted) setUser(null);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+
+    initAuth();
 
     const { data: authListener } = supabase.auth.onAuthStateChange(
       async (event, session) => {
         const currentUser = session?.user || null;
-        setUser(currentUser);
+        if (mounted) setUser(currentUser);
         
         if (currentUser) {
           await fetchUserData(currentUser);
         } else {
-          setAppUser(null);
-          setShop(null);
+          if (mounted) {
+            setAppUser(null);
+            setShop(null);
+          }
         }
-        setLoading(false);
+        if (mounted) setLoading(false);
       }
     );
 
-    // Initial check
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setUser(session.user);
-        fetchUserData(session.user).then(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
-
     return () => {
+      mounted = false;
       authListener.subscription.unsubscribe();
     };
   }, [router]);
