@@ -255,7 +255,14 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
 
   const handleSumAdder = () => {
     if (adderRowIndex === null) return;
-    const total = adderValues.reduce((s, v) => s + (parseMoney(v) || 0), 0);
+    
+    // Auto-append 000 to all shorthand values before summing
+    const total = adderValues.reduce((s, v) => {
+      let num = parseMoney(v) || 0;
+      if (num > 0 && num < 10000) num = num * 1000;
+      return s + num;
+    }, 0);
+    
     const count = adderValues.filter(v => parseMoney(v) > 0).length;
     
     updateRow(adderRowIndex, 'transfer', total);
@@ -361,10 +368,10 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
             <span>Tiến độ: {progressPct.toFixed(1)}%</span>
             <span>Mục tiêu: {fmt(monthlyTarget)}đ</span>
           </div>
-          {/* TRẠNG THÁI BÙ */}
-          {monthlyTarget > 0 && monthTotalKT < (monthlyTarget / 30) * (new Date(date + 'T00:00:00').getDate() || 1) && (
+          {/* TRẠNG THÁI BÙ - Chỉ hiện khi có ít nhất 1 bản ghi KT=0 trong tháng */}
+          {monthlyTarget > 0 && monthlyRecords.some(r => r.accounting_amount === 0) && (
             <div className="mt-2 text-[8px] text-orange-400 bg-orange-400/10 px-2 py-1 rounded inline-block font-bold animate-pulse">
-              ⚠️ Đang kích hoạt chế độ bù KT (do thiếu hụt tiến độ)
+              ⚠️ Đang kích hoạt chế độ bù KT (do có ngày nghỉ/KT=0)
             </div>
           )}
           {/* GHI CHÚ KHOẢNG AUTO */}
