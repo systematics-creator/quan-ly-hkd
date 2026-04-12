@@ -8,8 +8,6 @@ import { createUserWithRole, updateUserInShop, deleteUserFromShop } from '@/app/
 export default function ShopAdminSettings({ settings, onSettingsUpdated }: { settings: any, onSettingsUpdated: () => void }) {
   const { appUser, shop } = useAuth();
   
-  const [minKt, setMinKt] = useState(0);
-  const [maxKt, setMaxKt] = useState(0);
   const [yearlyLimit, setYearlyLimit] = useState(0);
   const [shopName, setShopName] = useState('');
   
@@ -31,8 +29,6 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
 
   useEffect(() => {
     if (settings) {
-      setMinKt(settings.min_kt || 0);
-      setMaxKt(settings.max_kt || 0);
       setYearlyLimit(settings.yearly_kt_limit || 0);
       setRaMin(settings.range_a_min || 1800000);
       setRaMax(settings.range_a_max || 2300000);
@@ -57,8 +53,6 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
     try {
       await supabase.from('shops').update({ name: shopName }).eq('id', appUser.shop_id);
       const payload = { 
-        min_kt: minKt, 
-        max_kt: maxKt, 
         yearly_kt_limit: yearlyLimit,
         range_a_min: raMin,
         range_a_max: raMax,
@@ -170,21 +164,6 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
              </div>
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
-            <div>
-              <label className="block text-[10px] font-bold mb-0.5 text-gray-400 uppercase">Min KT Chung (đ)</label>
-              <input 
-                type="text" value={formatCurrency(minKt)} onChange={handleCurrencyInput(setMinKt)}
-                className="border border-gray-200 p-2 rounded-md w-full text-sm outline-none"
-              />
-            </div>
-            <div>
-              <label className="block text-[10px] font-bold mb-0.5 text-gray-400 uppercase">Max KT Chung (đ)</label>
-              <input 
-                type="text" value={formatCurrency(maxKt)} onChange={handleCurrencyInput(setMaxKt)}
-                className="border border-gray-200 p-2 rounded-md w-full text-sm outline-none"
-              />
-            </div>
           </div>
           
           <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-md font-bold text-sm active:scale-95 shadow-sm">

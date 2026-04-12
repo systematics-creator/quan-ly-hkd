@@ -129,21 +129,23 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
 
     if (Math.abs(result - (prevKT || 0)) < 100) result += 333;
 
-    const min = settings?.min_kt || 0;
-    const max = settings?.max_kt || Infinity;
-    const finalVal = Math.max(min, Math.min(max, result));
+    // Bỏ Min/Max KT chung theo yêu cầu người dùng
+    const finalVal = Math.max(0, result);
     return { value: finalVal, isCompensated: bias > 0.1 };
   };
 
   const exportToExcel = () => {
-    if (monthlyRecords.length === 0) return;
-    const data = monthlyRecords.map(r => ({
-      'Ngày': new Date(r.date).toLocaleDateString('vi-VN'),
-      'Tên hàng': r.product_name,
-      'Chuyển khoản (CK)': r.transfer,
-      'Tiền mặt (TM)': r.cash,
-      'Mẫu KT': r.accounting_amount
-    }));
+    const data = monthlyRecords.map(r => {
+      const d = new Date(r.date + 'T00:00:00');
+      const dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+      return {
+        'Ngày': dateStr,
+        'Tên hàng': r.product_name,
+        'Chuyển khoản (CK)': r.transfer,
+        'Tiền mặt (TM)': r.cash,
+        'Mẫu KT': r.accounting_amount
+      };
+    });
     const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, "Kết quả");
@@ -253,8 +255,28 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                 <input type="text" value={rec.product_name} onChange={e => updateRow(i, 'product_name', e.target.value)} placeholder="Tên hàng hóa..." className="bg-gray-50 border p-2 rounded-lg font-bold text-sm outline-none" />
                 <div className="flex gap-2">
                   <div className="flex-1 grid grid-cols-2 gap-2">
-                    <div className="relative"><span className="absolute left-2 top-1 text-[8px] text-gray-400 font-bold">CK</span><input type="text" value={fmt(rec.transfer)} onChange={e => updateRow(i, 'transfer', parseMoney(e.target.value))} className="w-full border p-2 pt-3 rounded-lg text-right font-bold text-sm" /></div>
-                    <div className="relative"><span className="absolute left-2 top-1 text-[8px] text-gray-400 font-bold">TM</span><input type="text" value={fmt(rec.cash)} onChange={e => updateRow(i, 'cash', parseMoney(e.target.value))} className="w-full border p-2 pt-3 rounded-lg text-right font-bold text-sm" /></div>
+                    <div className="relative">
+                      <span className="absolute left-2 top-1 text-[8px] text-gray-400 font-bold">CK</span>
+                      <input 
+                        type="text" 
+                        value={fmt(rec.transfer)} 
+                        onFocus={e => rec.transfer === 0 && updateRow(i, 'transfer', '')}
+                        onBlur={e => rec.transfer === 0 && updateRow(i, 'transfer', 0)}
+                        onChange={e => updateRow(i, 'transfer', parseMoney(e.target.value))} 
+                        className="w-full border p-2 pt-3 rounded-lg text-right font-bold text-sm" 
+                      />
+                    </div>
+                    <div className="relative">
+                      <span className="absolute left-2 top-1 text-[8px] text-gray-400 font-bold">TM</span>
+                      <input 
+                        type="text" 
+                        value={fmt(rec.cash)} 
+                        onFocus={e => rec.cash === 0 && updateRow(i, 'cash', '')}
+                        onBlur={e => rec.cash === 0 && updateRow(i, 'cash', 0)}
+                        onChange={e => updateRow(i, 'cash', parseMoney(e.target.value))} 
+                        className="w-full border p-2 pt-3 rounded-lg text-right font-bold text-sm" 
+                      />
+                    </div>
                   </div>
                   <button onClick={() => doSave(i)} disabled={saving === i} className="bg-blue-600 text-white w-14 h-10 rounded-lg font-bold text-xs shadow disabled:opacity-50">{saving === i ? '...' : 'Lưu'}</button>
                 </div>
@@ -296,8 +318,9 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
             </div>
           )}
           {/* GHI CHÚ KHOẢNG AUTO */}
-          <div className="mt-2 text-[8px] text-gray-500 italic border-t border-white/5 pt-1">
-             Ghi chú: [A: {fmt(settings?.range_a_min || 1800000)}-{fmt(settings?.range_a_max || 2300000)}] | [B: {fmt(settings?.range_b_min || 2300000)}-{fmt(settings?.range_b_max || 3400000)}]
+          <div className="mt-2 text-[8px] text-gray-400 italic border-t border-white/5 pt-1 flex justify-between">
+             <span>Dải A: {fmt(settings?.range_a_min)}-{fmt(settings?.range_a_max)}</span>
+             <span>Dải B: {fmt(settings?.range_b_min)}-{fmt(settings?.range_b_max)}</span>
           </div>
         </div>
 
@@ -391,7 +414,12 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                       </td>
                     ) : (
                       <>
-                        <td className="px-1 py-2 text-gray-400 text-[9px]">{new Date(r.date + 'T00:00:00').toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit' })}</td>
+                        <td className="px-1 py-2 text-gray-400 text-[9px]">
+                          {(() => {
+                            const d = new Date(r.date + 'T00:00:00');
+                            return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
+                          })()}
+                        </td>
                         <td className="px-2 py-2 font-medium text-gray-700 truncate max-w-[70px]">{r.product_name}</td>
                         <td className="px-2 py-2 text-right">{fmt(r.transfer)}</td>
                         <td className="px-2 py-2 text-right">{fmt(r.cash)}</td>

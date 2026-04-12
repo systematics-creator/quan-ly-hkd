@@ -33,8 +33,7 @@ create table public.daily_records (
   cash numeric default 0,
   transfer numeric default 0,
   accounting_amount numeric default 0,
-  created_at timestamp with time zone default timezone('utc'::text, now()),
-  unique (shop_id, date, product_name)
+  created_at timestamp with time zone default timezone('utc'::text, now())
 );
 
 -- 4. Create Shop Settings Table
