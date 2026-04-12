@@ -40,7 +40,23 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     }
   }, [appUser, date]);
 
+  // Persistence: Save to localStorage
+  useEffect(() => {
+    if (inputRows.length > 0 && inputRows[0].product_name !== '' || inputRows[0].cash !== 0 || inputRows[0].transfer !== 0) {
+      localStorage.setItem(`hkd_draft_${date}_${appUser?.id}`, JSON.stringify(inputRows));
+    }
+  }, [inputRows, date, appUser]);
+
   const loadTodayRows = async () => {
+    const saved = localStorage.getItem(`hkd_draft_${date}_${appUser?.id}`);
+    if (saved) {
+      try {
+        setInputRows(JSON.parse(saved));
+        return;
+      } catch (e) {
+        console.error("Failed to parse saved rows", e);
+      }
+    }
     setInputRows([{ product_name: '', cash: 0, transfer: 0, accounting_amount: 0, isNew: true }]);
   };
 
@@ -67,13 +83,42 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     const rbMin = settings?.range_b_min || 2300000;
     const rbMax = settings?.range_b_max || 3400000;
 
+    // --- THUẬT TOÁN BÙ (COMPENSATION LOGIC) ---
+    // Tính toán tiến độ cần thiết để đạt mục tiêu tháng
+    const [y, m] = date.split('-').map(Number);
+    const daysInMonth = new Date(y, m, 0).getDate();
+    const dayOfMonth = new Date(date).getDate();
+    const monthlyTarget = (settings?.yearly_kt_limit || 0) / 12;
+    
+    // Tổng KT hiện tại trong tháng (bao gồm cả các bản ghi cũ)
+    const currentMonthTotal = monthlyRecords.reduce((s, r) => s + (r.accounting_amount || 0), 0);
+    
+    // Tiến độ lý tưởng đến ngày hiện tại
+    const idealProgress = (monthlyTarget / daysInMonth) * dayOfMonth;
+    
+    // Độ lệch (Gap): Nếu thiếu hụt so với tiến độ lý tưởng (do nghỉ làm KT=0), bias sẽ tăng lên
+    const gap = idealProgress - currentMonthTotal;
+    
+    // Tỉ lệ bù: từ 0 đến 1. Nếu hụt nhiều, bias tiến gần về 1 (lấy giá trị Max của dải)
+    // Chia cho 1/3 mục tiêu tháng để làm mượt tỉ lệ bù
+    const bias = gap > 0 ? Math.min(gap / (monthlyTarget / 3), 1) : 0;
+
+    // Tạo số ngẫu nhiên có trọng số (biasing towards Max if lagging)
+    const weightedRandom = () => {
+      const r = Math.random();
+      // Nếu bias = 1, kết quả luôn là 1 (Max). Nếu bias = 0, kết quả là ngẫu nhiên đều 0-1.
+      return r * (1 - bias) + bias;
+    };
+
     let result = 0;
+    const rand = weightedRandom();
+    
     if (transfer < 1500000) {
-      const delta = Math.max(0, raMax - raMin - 2);
-      result = raMin + 1 + Math.floor(Math.random() * (delta + 1));
+      const delta = Math.max(0, raMax - raMin);
+      result = raMin + Math.floor(rand * delta);
     } else {
       const delta = Math.max(0, rbMax - rbMin);
-      result = rbMin + Math.floor(Math.random() * (delta + 1));
+      result = rbMin + Math.floor(rand * delta);
     }
 
     if (Math.abs(result - (prevKT || 0)) < 100) result += 333;
@@ -81,7 +126,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     const min = settings?.min_kt || 0;
     const max = settings?.max_kt || Infinity;
     const finalVal = Math.max(min, Math.min(max, result));
-    return { value: finalVal };
+    return { value: finalVal, isCompensated: bias > 0.1 };
   };
 
   const exportToExcel = () => {
@@ -112,6 +157,8 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       nr[index] = { product_name: rec.product_name, cash: 0, transfer: 0, accounting_amount: ins.accounting_amount, isNew: true };
       setInputRows(nr);
       await loadMonthlyResults();
+      // Update storage after individual save
+      localStorage.setItem(`hkd_draft_${date}_${appUser?.id}`, JSON.stringify(nr));
     }
     setSaving(null);
   };
@@ -126,6 +173,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     }
     await loadTodayRows();
     await loadMonthlyResults();
+    localStorage.removeItem(`hkd_draft_${date}_${appUser?.id}`);
     setSavingAll(false);
   };
 
@@ -136,13 +184,18 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
 
   const handleSaveEdit = async () => {
     if (!editFormData) return;
-    const { value: kt } = calcKT(editFormData.transfer, editFormData.cash, editFormData.accounting_amount);
+    
+    // If KT is manually changed or it's 0 (day off), we use it. 
+    // Otherwise, we could still use calcKT if we want auto-adjustment, 
+    // but usually user wants control during edit.
+    // Let's use the value from the form directly.
+    
     const { error } = await supabase.from('daily_records').update({
       date: editFormData.date,
       product_name: editFormData.product_name,
       transfer: editFormData.transfer,
       cash: editFormData.cash,
-      accounting_amount: kt
+      accounting_amount: editFormData.accounting_amount
     }).eq('id', editingId);
 
     if (!error) {
@@ -180,9 +233,11 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   return (
     <div className="space-y-4">
       {/* NHẬP LIỆU */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="bg-blue-600 px-4 py-3 flex justify-between items-center text-white">
-          <h2 className="font-bold text-sm uppercase">📝 Nhập Liệu</h2>
+      <div className="bg-blue-50/50 rounded-3xl shadow-xl border border-blue-100 overflow-hidden backdrop-blur-sm transition-all hover:shadow-2xl">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-500 px-5 py-4 flex justify-between items-center text-white shadow-md">
+          <h2 className="font-black text-sm uppercase tracking-wider flex items-center gap-2">
+            <span className="bg-white/20 p-1 rounded-lg">📝</span> Nhập Liệu
+          </h2>
           <input type="date" value={date} onChange={e => setDate(e.target.value)} className="bg-white/20 border border-white/30 rounded-lg px-2 py-0.5 text-xs outline-none" />
         </div>
         <div className="p-2">
@@ -208,12 +263,15 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       </div>
 
       {/* KẾT QUẢ THÁNG */}
-      <div className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
-        <div className="bg-gray-800 px-4 py-3 text-white">
-          <div className="flex justify-between items-center mb-2">
+      <div className="bg-green-50/30 rounded-3xl shadow-xl border border-green-100 overflow-hidden backdrop-blur-sm transition-all hover:shadow-2xl">
+        <div className="bg-gradient-to-r from-gray-900 via-gray-800 to-gray-900 px-5 py-4 text-white shadow-md">
+          <div className="flex justify-between items-center mb-3">
             <div>
-              <h1 className="font-bold text-[10px] uppercase text-gray-400">📊 Tháng {currentMonth.replace('-', '/')}</h1>
-              <div className="font-black text-green-400 text-lg">{fmt(monthTotalKT)}đ</div>
+              <h1 className="font-bold text-[10px] uppercase text-gray-400 tracking-widest mb-1 flex items-center gap-1">
+                <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                Tháng {currentMonth.replace('-', '/')}
+              </h1>
+              <div className="font-black text-green-400 text-2xl drop-shadow-md">{fmt(monthTotalKT)}đ</div>
             </div>
             <div className="flex gap-2">
               {selectedIds.length > 0 && <button onClick={doDeleteSelection} className="bg-red-500 text-white px-3 py-1 text-[10px] font-bold rounded shadow animate-pulse">XÓA ({selectedIds.length})</button>}
@@ -225,6 +283,12 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
             <span>Tiến độ: {progressPct.toFixed(1)}%</span>
             <span>Mục tiêu: {fmt(monthlyTarget)}đ</span>
           </div>
+          {/* TRẠNG THÁI BÙ */}
+          {monthTotalKT < (monthlyTarget / 30) * new Date(date).getDate() && (
+            <div className="mt-2 text-[8px] text-orange-400 bg-orange-400/10 px-2 py-1 rounded inline-block font-bold animate-pulse">
+              ⚠️ Đang kích hoạt chế độ bù KT (do thiếu hụt tiến độ)
+            </div>
+          )}
           {/* GHI CHÚ KHOẢNG AUTO */}
           <div className="mt-2 text-[8px] text-gray-500 italic border-t border-white/5 pt-1">
              Ghi chú: [A: {fmt(settings?.range_a_min || 1800000)}-{fmt(settings?.range_a_max || 2300000)}] | [B: {fmt(settings?.range_b_min || 2300000)}-{fmt(settings?.range_b_max || 3400000)}]
@@ -300,6 +364,16 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                               value={fmt(editFormData.cash)} 
                               onChange={e => setEditFormData({...editFormData, cash: parseMoney(e.target.value)})} 
                               className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm bg-white outline-none focus:border-blue-500 font-bold text-right" 
+                            />
+                          </div>
+
+                          <div>
+                            <label className="block text-[9px] font-bold text-green-600 uppercase mb-1 text-center">Mẫu KT (Có thể chỉnh 0 nếu nghỉ)</label>
+                            <input 
+                              type="text" 
+                              value={fmt(editFormData.accounting_amount)} 
+                              onChange={e => setEditFormData({...editFormData, accounting_amount: parseMoney(e.target.value)})} 
+                              className="w-full border-2 border-green-400 rounded-lg px-3 py-2 text-base bg-white outline-none focus:ring-2 focus:ring-green-400 font-black text-right text-green-700" 
                             />
                           </div>
 

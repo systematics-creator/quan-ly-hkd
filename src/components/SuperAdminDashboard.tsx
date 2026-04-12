@@ -18,6 +18,7 @@ export default function SuperAdminDashboard() {
   const [storeCode, setStoreCode] = useState(generateStoreCode());
   const [storeName, setStoreName] = useState('Cửa hàng mới');
   const [expireDate, setExpireDate] = useState('');
+  const [contactPhone, setContactPhone] = useState('09xx');
   
   // Admin User Fields
   const [adminEmail, setAdminEmail] = useState('');
@@ -41,7 +42,8 @@ export default function SuperAdminDashboard() {
       const { data: newShop, error: shopError } = await supabase.from('shops').insert({
         store_code: storeCode,
         name: storeName,
-        expire_at: new Date(expireDate).toISOString()
+        expire_at: new Date(expireDate).toISOString(),
+        contact_phone: contactPhone
       }).select().single();
 
       if (shopError || !newShop) {
@@ -99,6 +101,10 @@ export default function SuperAdminDashboard() {
             <label className="block text-sm mb-1">Tên Tạm</label>
             <input type="text" value={storeName} onChange={e => setStoreName(e.target.value)} className="border p-2 rounded w-full" />
           </div>
+          <div>
+            <label className="block text-sm mb-1">SĐT Liên hệ (Chữ nhỏ Footer)</label>
+            <input type="text" value={contactPhone} onChange={e => setContactPhone(e.target.value)} className="border p-2 rounded w-full font-bold text-red-600" placeholder="09xxx" />
+          </div>
 
           <div className="col-span-1 md:col-span-2 lg:col-span-3 border-b pb-2 mb-2 mt-4 font-medium text-gray-700">Tài Khoản Admin Cửa Hàng</div>
           <div>
@@ -125,6 +131,7 @@ export default function SuperAdminDashboard() {
             <tr className="bg-gray-50 border-b">
               <th className="p-3">Mã MS</th>
               <th className="p-3">Tên Cửa Hàng</th>
+              <th className="p-3">SĐT</th>
               <th className="p-3">Ngày Hết Hạn</th>
               <th className="p-3">Trạng thái</th>
             </tr>
@@ -134,6 +141,7 @@ export default function SuperAdminDashboard() {
               <tr key={shop.id} className="border-b hover:bg-gray-50">
                 <td className="p-3 font-bold text-blue-700">{shop.store_code}</td>
                 <td className="p-3">{shop.name}</td>
+                <td className="p-3 text-xs">{shop.contact_phone || '---'}</td>
                 <td className="p-3">{new Date(shop.expire_at).toLocaleDateString('vi-VN')}</td>
                 <td className="p-3">
                   <span className={`px-2 py-1 rounded text-xs font-semibold ${shop.is_active ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>

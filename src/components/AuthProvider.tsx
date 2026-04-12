@@ -18,6 +18,7 @@ type Shop = {
   store_code: string;
   expire_at: string;
   is_active: boolean;
+  contact_phone?: string;
 };
 
 type AuthContextType = {

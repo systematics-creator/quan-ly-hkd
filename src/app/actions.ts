@@ -39,3 +39,36 @@ export async function createUserWithRole(email: string, password: string, role: 
     return { error: err.message };
   }
 }
+
+export async function updateUserInShop(userId: string, email: string, password?: string, role?: string) {
+  try {
+    // 1. Update Auth User if password is provided
+    if (password) {
+      const { error: authError } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+        password: password
+      });
+      if (authError) return { error: authError.message };
+    }
+
+    // 2. Update custom Users table
+    const updates: any = { email };
+    if (role) updates.role = role;
+
+    const { error: dbError } = await supabaseAdmin.from('users').update(updates).eq('id', userId);
+    if (dbError) return { error: dbError.message };
+
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}
+
+export async function deleteUserFromShop(userId: string) {
+  try {
+    const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+    if (error) return { error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}

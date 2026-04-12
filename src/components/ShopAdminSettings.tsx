@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useAuth } from '@/components/AuthProvider';
-import { createUserWithRole } from '@/app/actions';
+import { createUserWithRole, updateUserInShop, deleteUserFromShop } from '@/app/actions';
 
 export default function ShopAdminSettings({ settings, onSettingsUpdated }: { settings: any, onSettingsUpdated: () => void }) {
   const { appUser, shop } = useAuth();
@@ -23,6 +23,11 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
   const [newUserPass, setNewUserPass] = useState('');
   const [newUserRole, setNewUserRole] = useState('user');
   const [loading, setLoading] = useState(false);
+
+  const [editingUserId, setEditingUserId] = useState<string | null>(null);
+  const [editUserEmail, setEditUserEmail] = useState('');
+  const [editUserPass, setEditUserPass] = useState('');
+  const [editUserRole, setEditUserRole] = useState('user');
 
   useEffect(() => {
     if (settings) {
@@ -80,6 +85,36 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
     setLoading(false);
   };
 
+  const handleStartEditUser = (u: any) => {
+    setEditingUserId(u.id);
+    setEditUserEmail(u.email);
+    setEditUserRole(u.role);
+    setEditUserPass('');
+  };
+
+  const handleUpdateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUserId) return;
+    setLoading(true);
+    const res = await updateUserInShop(editingUserId, editUserEmail, editUserPass || undefined, editUserRole);
+    if (res.error) alert('Lỗi: ' + res.error);
+    else {
+      alert('Đã cập nhật!');
+      setEditingUserId(null);
+      fetchUsers();
+    }
+    setLoading(false);
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    if (!confirm('Xóa nhân sự này?')) return;
+    setLoading(true);
+    const res = await deleteUserFromShop(userId);
+    if (res.error) alert('Lỗi: ' + res.error);
+    else { alert('Đã xóa!'); fetchUsers(); }
+    setLoading(false);
+  };
+
   const formatCurrency = (val: number) => {
     return new Intl.NumberFormat('vi-VN').format(val || 0);
   };
@@ -97,7 +132,7 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
   return (
     <div className="space-y-4 mt-4 text-xs">
       {/* 1. Cấu Hình Shop */}
-      <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+      <div className="bg-blue-50/50 p-3 rounded-xl border border-blue-100 shadow-sm">
         <h2 className="text-base font-bold mb-2 text-blue-800">Thiết Lập Cửa Hàng</h2>
         
         <form onSubmit={handleSaveSettings} className="space-y-3 pt-2">
@@ -159,7 +194,7 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
       </div>
 
       {/* 2. Quản Lý Nhân Sự */}
-      <div className="bg-white p-3 rounded-lg border border-gray-100 shadow-sm">
+      <div className="bg-orange-50/50 p-3 rounded-xl border border-orange-100 shadow-sm">
         <h2 className="text-base font-bold mb-2 text-gray-800">Nhân Sự</h2>
         <form onSubmit={handleCreateUser} className="space-y-2 mb-3 bg-gray-50/50 p-2 rounded border border-gray-100">
           <input 
@@ -195,11 +230,52 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
                 <th className="p-2 text-center">Vai trò</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-50">
+            <tbody className="divide-y divide-gray-100">
               {users.map(u => (
-                <tr key={u.id}>
-                  <td className="p-2 text-gray-700 truncate max-w-[140px]">{u.email}</td>
-                  <td className="p-2 text-center uppercase text-[9px] font-bold text-gray-500">{u.role}</td>
+                <tr key={u.id} className="hover:bg-white/50">
+                  <td className="p-2 text-gray-700 truncate max-w-[140px]">
+                    {editingUserId === u.id ? (
+                      <input 
+                        type="email" value={editUserEmail} 
+                        onChange={e => setEditUserEmail(e.target.value)}
+                        className="border border-blue-300 p-1 rounded w-full text-[10px]"
+                      />
+                    ) : u.email}
+                  </td>
+                  <td className="p-2 text-center">
+                    {editingUserId === u.id ? (
+                      <select 
+                        value={editUserRole} onChange={e => setEditUserRole(e.target.value)}
+                        className="border border-blue-300 p-1 rounded text-[10px]"
+                      >
+                        <option value="user">USER</option>
+                        <option value="manager">MGR</option>
+                        <option value="admin">ADM</option>
+                      </select>
+                    ) : (
+                      <span className="uppercase text-[9px] font-bold text-gray-500">{u.role}</span>
+                    )}
+                  </td>
+                  <td className="p-2 text-right">
+                    {editingUserId === u.id ? (
+                      <div className="flex flex-col gap-1">
+                        <input 
+                          type="text" placeholder="Pass mới" value={editUserPass}
+                          onChange={e => setEditUserPass(e.target.value)}
+                          className="border border-blue-300 p-1 rounded text-[10px] w-20"
+                        />
+                        <div className="flex gap-1">
+                           <button onClick={handleUpdateUser} className="bg-blue-600 text-white px-2 py-0.5 rounded">V</button>
+                           <button onClick={() => setEditingUserId(null)} className="bg-gray-400 text-white px-2 py-0.5 rounded">X</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex justify-end gap-2">
+                         <button onClick={() => handleStartEditUser(u)} className="text-blue-500">✏️</button>
+                         <button onClick={() => handleDeleteUser(u.id)} className="text-red-400">🗑️</button>
+                      </div>
+                    )}
+                  </td>
                 </tr>
               ))}
             </tbody>
