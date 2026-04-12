@@ -161,18 +161,30 @@ export default function SuperAdminDashboard() {
 
               const handleSaveEdit = async () => {
                 setLoading(true);
-                const { error } = await supabase.from('shops').update({
-                  name: editFormData.name,
-                  contact_phone: editFormData.contact_phone,
-                  auto_logout_minutes: editFormData.auto_logout_minutes,
-                  expire_at: new Date(editFormData.expire_at).toISOString(),
-                  is_active: editFormData.is_active
-                }).eq('id', shop.id);
-                
-                if (!error) {
-                  setEditingShopId(null);
-                  fetchData();
-                } else alert(error.message);
+                try {
+                  const expireAt = editFormData.expire_at ? new Date(editFormData.expire_at).toISOString() : shop.expire_at;
+                  
+                  const { error } = await supabase.from('shops').update({
+                    name: editFormData.name,
+                    contact_phone: editFormData.contact_phone,
+                    auto_logout_minutes: editFormData.auto_logout_minutes,
+                    expire_at: expireAt,
+                    is_active: editFormData.is_active
+                  }).eq('id', shop.id);
+                  
+                  if (!error) {
+                    setEditingShopId(null);
+                    fetchData();
+                  } else {
+                    if (error.message.includes("contact_phone")) {
+                      alert("LỖI: Bảng dữ liệu chưa được cập nhật cột Số điện thoại. Bạn hãy chạy câu lệnh SQL tôi đã gửi trước đó trong Supabase.");
+                    } else {
+                      alert("Lỗi: " + error.message);
+                    }
+                  }
+                } catch (e: any) {
+                  alert("Lỗi định dạng dữ liệu: " + e.message);
+                }
                 setLoading(false);
               };
 
@@ -191,15 +203,27 @@ export default function SuperAdminDashboard() {
                     <td colSpan={6} className="p-4 border">
                       <div className="flex flex-col gap-3">
                          <div className="font-bold text-blue-700 uppercase mb-2">Chỉnh sửa Cửa Hàng: {shop.store_code}</div>
-                         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                           <div><label className="text-[10px] uppercase font-bold text-gray-400">Tên</label><input type="text" value={editFormData.name} onChange={e => setEditFormData({...editFormData, name: e.target.value})} className="border p-2 rounded w-full text-xs font-bold" /></div>
-                           <div><label className="text-[10px] uppercase font-bold text-gray-400">SĐT</label><input type="text" value={editFormData.contact_phone} onChange={e => setEditFormData({...editFormData, contact_phone: e.target.value})} className="border p-2 rounded w-full text-xs font-bold text-red-600" /></div>
-                           <div><label className="text-[10px] uppercase font-bold text-gray-400">Hết hạn</label><input type="date" value={editFormData.expire_at} onChange={e => setEditFormData({...editFormData, expire_at: e.target.value})} className="border p-2 rounded w-full text-xs" /></div>
-                           <div><label className="text-[10px] uppercase font-bold text-gray-400">Tự thoát (p)</label><input type="number" value={editFormData.auto_logout_minutes} onChange={e => setEditFormData({...editFormData, auto_logout_minutes: Number(e.target.value)})} className="border p-2 rounded w-full text-xs font-bold" /></div>
-                           <div className="col-span-2">
-                             <label className="flex items-center gap-2 cursor-pointer mt-5">
+                         <div className="flex flex-col gap-4 max-w-md">
+                           <div>
+                             <label className="text-[10px] uppercase font-bold text-gray-400">Tên Cửa Hàng</label>
+                             <input type="text" value={editFormData.name} onChange={e => setEditFormData({...editFormData, name: e.target.value})} className="border p-2 rounded w-full text-sm font-bold" />
+                           </div>
+                           <div>
+                             <label className="text-[10px] uppercase font-bold text-gray-400">Số Điện Thoại (Footer)</label>
+                             <input type="text" value={editFormData.contact_phone} onChange={e => setEditFormData({...editFormData, contact_phone: e.target.value})} className="border p-2 rounded w-full text-sm font-bold text-red-600" />
+                           </div>
+                           <div>
+                             <label className="text-[10px] uppercase font-bold text-gray-400">Ngày Hết Hạn</label>
+                             <input type="date" value={editFormData.expire_at} onChange={e => setEditFormData({...editFormData, expire_at: e.target.value})} className="border p-2 rounded w-full text-sm" />
+                           </div>
+                           <div>
+                             <label className="text-[10px] uppercase font-bold text-gray-400">Tự thoát sau (Phút)</label>
+                             <input type="number" value={editFormData.auto_logout_minutes} onChange={e => setEditFormData({...editFormData, auto_logout_minutes: Number(e.target.value)})} className="border p-2 rounded w-full text-sm font-bold" />
+                           </div>
+                           <div>
+                             <label className="flex items-center gap-2 cursor-pointer pt-2">
                                <input type="checkbox" checked={editFormData.is_active} onChange={e => setEditFormData({...editFormData, is_active: e.target.checked})} />
-                               <span className="text-xs font-bold">Kích hoạt cửa hàng</span>
+                               <span className="text-sm font-bold">Kích hoạt cửa hàng</span>
                              </label>
                            </div>
                          </div>
