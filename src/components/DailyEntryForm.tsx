@@ -134,11 +134,26 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       result = rbMin + Math.floor(rand * delta);
     }
 
-    if (Math.abs(result - (prevKT || 0)) < 100) result += 333;
+    // Áp dụng quy tắc làm tròn đặc biệt theo yêu cầu:
+    // Hàng đơn vị, chục, trăm = 0. Hàng ngàn là 0, 5, 6, 8, 9.
+    const roundKT = (val: number) => {
+      let base = Math.floor(val / 1000) * 1000;
+      let thousands = Math.floor(base / 1000) % 10;
+      const allowed = [0, 5, 6, 8, 9];
+      
+      if (!allowed.includes(thousands)) {
+        // Tìm số gần nhất trong danh sách cho phép
+        const nearest = allowed.reduce((prev, curr) => 
+          Math.abs(curr - thousands) < Math.abs(prev - thousands) ? curr : prev
+        );
+        // Thay thế số hàng ngàn
+        base = Math.floor(base / 10000) * 10000 + (nearest * 1000);
+      }
+      return base;
+    };
 
-    // Bỏ Min/Max KT chung theo yêu cầu người dùng
-    const finalVal = (transfer === 0 && cash === 0) ? 0 : Math.max(0, result);
-    return { value: finalVal, isCompensated: bias > 0.1 };
+    const finalResult = (transfer === 0 && cash === 0) ? 0 : roundKT(result);
+    return { value: finalResult, isCompensated: bias > 0.1 };
   };
 
   const exportToExcel = () => {
