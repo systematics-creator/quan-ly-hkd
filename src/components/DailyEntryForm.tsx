@@ -12,6 +12,7 @@ type Row = {
   transfer: number | string;
   accounting_amount: number;
   isNew?: boolean;
+  transfer_count?: number;
 };
 
 const fmt = (val: number | string) => {
@@ -32,6 +33,10 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState<any>(null);
+
+  // Quick Adder State
+  const [adderRowIndex, setAdderRowIndex] = useState<number | null>(null);
+  const [adderValues, setAdderValues] = useState<string[]>(['']);
 
   const currentMonth = date.substring(0, 7);
 
@@ -230,7 +235,26 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
 
   const addEmptyRow = () => {
     const prev = inputRows[inputRows.length - 1];
-    setInputRows([...inputRows, { product_name: prev?.product_name || '', cash: 0, transfer: 0, accounting_amount: 0, isNew: true }]);
+    setInputRows([...inputRows, { product_name: prev?.product_name || '', cash: 0, transfer: 0, accounting_amount: 0, isNew: true, transfer_count: 0 }]);
+  };
+
+  const openAdder = (index: number) => {
+    setAdderRowIndex(index);
+    setAdderValues(['']);
+  };
+
+  const closeAdder = () => {
+    setAdderRowIndex(null);
+  };
+
+  const handleSumAdder = () => {
+    if (adderRowIndex === null) return;
+    const total = adderValues.reduce((s, v) => s + (parseMoney(v) || 0), 0);
+    const count = adderValues.filter(v => parseMoney(v) > 0).length;
+    
+    updateRow(adderRowIndex, 'transfer', total);
+    updateRow(adderRowIndex, 'transfer_count', count);
+    closeAdder();
   };
 
   const toggleSelectAll = () => (selectedIds.length === monthlyRecords.length) ? setSelectedIds([]) : setSelectedIds(monthlyRecords.map(r => r.id));
@@ -273,6 +297,18 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                         onChange={e => updateRow(i, 'transfer', parseMoney(e.target.value))} 
                         className="w-full border p-2 pt-3 rounded-lg text-right font-bold text-sm" 
                       />
+                      <button 
+                        onClick={() => openAdder(i)} 
+                        className="absolute left-1 bottom-1 bg-gray-100 text-[10px] w-4 h-4 rounded-full border flex items-center justify-center hover:bg-blue-100 transition-colors"
+                        title="Cộng nhiều số"
+                      >
+                        Σ
+                      </button>
+                      {rec.transfer_count ? (
+                        <div className="absolute right-1 -bottom-4 text-[8px] text-blue-500 font-bold whitespace-nowrap">
+                          * Đã cộng {rec.transfer_count} số
+                        </div>
+                      ) : null}
                     </div>
                     <div className="relative">
                       <span className="absolute left-2 top-1 text-[8px] text-gray-400 font-bold">TM</span>
@@ -446,6 +482,43 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
           </table>
         </div>
       </div>
+
+      {/* QUICK ADDER MODAL */}
+      {adderRowIndex !== null && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-3xl shadow-2xl w-full max-w-xs overflow-hidden animate-in zoom-in duration-200">
+            <div className="bg-blue-600 p-4 text-white flex justify-between items-center">
+              <h3 className="font-black text-sm uppercase tracking-tighter">Bộ Cộng Dữ Liệu CK</h3>
+              <button onClick={closeAdder} className="text-xl">✕</button>
+            </div>
+            <div className="p-4 space-y-2 max-h-[60vh] overflow-y-auto">
+              {adderValues.map((val, idx) => (
+                <div key={idx} className="flex gap-2">
+                  <input 
+                    type="text" 
+                    autoFocus={idx === adderValues.length - 1}
+                    value={fmt(val)} 
+                    onChange={e => {
+                      const nv = [...adderValues];
+                      nv[idx] = String(parseMoney(e.target.value));
+                      setAdderValues(nv);
+                    }}
+                    placeholder="Nhập số tiền..."
+                    className="flex-1 border-2 border-gray-100 p-2 rounded-xl text-right font-bold focus:border-blue-400 outline-none"
+                  />
+                  {idx === adderValues.length - 1 && (
+                    <button onClick={() => setAdderValues([...adderValues, ''])} className="bg-blue-50 text-blue-600 w-10 h-10 rounded-xl font-bold text-xl">+</button>
+                  )}
+                </div>
+              ))}
+            </div>
+            <div className="p-4 bg-gray-50 flex gap-2 border-t">
+              <button onClick={handleSumAdder} className="flex-1 bg-blue-600 text-white p-3 rounded-2xl font-black text-xs shadow-lg active:scale-95">CỘNG & ĐƯA VÀO CK</button>
+              <button onClick={closeAdder} className="bg-gray-200 text-gray-500 px-4 rounded-2xl font-bold text-xs uppercase">Hủy</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
