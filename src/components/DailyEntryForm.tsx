@@ -47,15 +47,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     }
   }, [appUser, date]);
 
-  // Persistence: Save to localStorage
-  useEffect(() => {
-    if (inputRows.length > 0) {
-      const firstRow = inputRows[0];
-      if (firstRow.product_name !== '' || firstRow.cash !== 0 || firstRow.transfer !== 0) {
-        localStorage.setItem(`hkd_draft_${date}_${appUser?.id}`, JSON.stringify(inputRows));
-      }
-    }
-  }, [inputRows, date, appUser]);
+  const lastProductKey = `hkd_last_product_${appUser?.id}`;
 
   const loadTodayRows = async () => {
     const saved = localStorage.getItem(`hkd_draft_${date}_${appUser?.id}`);
@@ -67,7 +59,8 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
         console.error("Failed to parse saved rows", e);
       }
     }
-    setInputRows([{ product_name: '', cash: 0, transfer: 0, accounting_amount: 0, isNew: true }]);
+    const lastProduct = localStorage.getItem(lastProductKey) || '';
+    setInputRows([{ product_name: lastProduct, cash: 0, transfer: 0, accounting_amount: 0, isNew: true, transfer_count: 0 }]);
   };
 
   const loadMonthlyResults = async () => {
@@ -186,6 +179,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     const { value: kt } = calcKT(transVal, cashVal, lastKT);
     const { data: ins, error } = await supabase.from('daily_records').insert({ cash: cashVal, transfer: transVal, accounting_amount: kt, product_name: rec.product_name, shop_id: appUser?.shop_id, date }).select().single();
     if (!error) {
+      localStorage.setItem(lastProductKey, rec.product_name);
       const nr = [...inputRows];
       nr[index] = { product_name: rec.product_name, cash: 0, transfer: 0, accounting_amount: ins.accounting_amount, isNew: true, transfer_count: 0 };
       setInputRows(nr);
@@ -249,7 +243,12 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   };
 
   const updateRow = (index: number, field: keyof Row, val: any) => {
-    const nr = [...inputRows]; (nr[index] as any)[field] = val; setInputRows(nr);
+    const nr = [...inputRows]; 
+    (nr[index] as any)[field] = val; 
+    if (field === 'product_name' && val) {
+      localStorage.setItem(lastProductKey, val);
+    }
+    setInputRows(nr);
   };
 
   const parseMoney = (v: any) => typeof v === 'string' ? Number(v.replace(/[^0-9]/g, '')) : Number(v);
@@ -297,6 +296,16 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   const monthTotalKT = monthlyRecords.reduce((s, r) => s + (r.accounting_amount || 0), 0);
   const monthlyTarget = (settings?.yearly_kt_limit || 0) / 12;
   const progressPct = monthlyTarget > 0 ? Math.min((monthTotalKT / monthlyTarget) * 100, 100) : 0;
+ 
+  // Persistence: Save to localStorage
+  useEffect(() => {
+    if (inputRows.length > 0) {
+      const hasContent = inputRows.some(r => r.product_name !== '' || r.cash !== 0 || r.transfer !== 0);
+      if (hasContent) {
+        localStorage.setItem(`hkd_draft_${date}_${appUser?.id}`, JSON.stringify(inputRows));
+      }
+    }
+  }, [inputRows, date, appUser]);
 
   return (
     <div className="space-y-4">
