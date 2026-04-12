@@ -21,6 +21,7 @@ export default function SuperAdminDashboard() {
   const [autoLogoutMinutes, setAutoLogoutMinutes] = useState(60);
   
   // Admin User Fields
+  const [adminEmail, setAdminEmail] = useState('');
   const [adminPass, setAdminPass] = useState('');
   
   // Edit State
