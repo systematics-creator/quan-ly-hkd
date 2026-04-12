@@ -137,7 +137,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     if (Math.abs(result - (prevKT || 0)) < 100) result += 333;
 
     // Bỏ Min/Max KT chung theo yêu cầu người dùng
-    const finalVal = Math.max(0, result);
+    const finalVal = (transfer === 0 && cash === 0) ? 0 : Math.max(0, result);
     return { value: finalVal, isCompensated: bias > 0.1 };
   };
 
@@ -164,7 +164,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     const cashVal = Number(rec.cash) || 0;
     const transVal = Number(rec.transfer) || 0;
 
-    if (!rec.product_name.trim() || (cashVal === 0 && transVal === 0)) { alert('Nhập dữ liệu!'); return; }
+    if (!rec.product_name.trim()) { alert('Vui lòng nhập Tên hàng hóa!'); return; }
     setSaving(index);
     const { data: history } = await supabase.from('daily_records').select('accounting_amount').eq('product_name', rec.product_name).eq('shop_id', appUser?.shop_id).order('created_at', { ascending: false }).limit(1);
     const lastKT = (history && history.length > 0) ? history[0].accounting_amount : 0;
@@ -188,7 +188,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       for (const rec of inputRows) {
         const cashVal = Number(rec.cash) || 0;
         const transVal = Number(rec.transfer) || 0;
-        if (!rec.product_name.trim() || (cashVal === 0 && transVal === 0)) continue;
+        if (!rec.product_name.trim()) continue;
         
         const { data: history } = await supabase.from('daily_records').select('accounting_amount').eq('product_name', rec.product_name).eq('shop_id', appUser?.shop_id).order('created_at', { ascending: false }).limit(1);
         const { value: kt } = calcKT(transVal, cashVal, (history && history.length > 0) ? history[0].accounting_amount : 0);
