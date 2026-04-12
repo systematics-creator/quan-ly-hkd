@@ -172,29 +172,35 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     const { data: ins, error } = await supabase.from('daily_records').insert({ cash: cashVal, transfer: transVal, accounting_amount: kt, product_name: rec.product_name, shop_id: appUser?.shop_id, date }).select().single();
     if (!error) {
       const nr = [...inputRows];
-      nr[index] = { product_name: rec.product_name, cash: 0, transfer: 0, accounting_amount: ins.accounting_amount, isNew: true };
+      nr[index] = { product_name: rec.product_name, cash: 0, transfer: 0, accounting_amount: ins.accounting_amount, isNew: true, transfer_count: 0 };
       setInputRows(nr);
       await loadMonthlyResults();
-      // Update storage after individual save
       localStorage.setItem(`hkd_draft_${date}_${appUser?.id}`, JSON.stringify(nr));
+    } else {
+      alert("Lỗi khi lưu: " + error.message);
     }
     setSaving(null);
   };
 
   const doSaveAll = async () => {
     setSavingAll(true);
-    for (const rec of inputRows) {
-      const cashVal = Number(rec.cash) || 0;
-      const transVal = Number(rec.transfer) || 0;
-      if (!rec.product_name.trim() || (cashVal === 0 && transVal === 0)) continue;
-      
-      const { data: history } = await supabase.from('daily_records').select('accounting_amount').eq('product_name', rec.product_name).eq('shop_id', appUser?.shop_id).order('created_at', { ascending: false }).limit(1);
-      const { value: kt } = calcKT(transVal, cashVal, (history && history.length > 0) ? history[0].accounting_amount : 0);
-      await supabase.from('daily_records').insert({ cash: cashVal, transfer: transVal, accounting_amount: kt, product_name: rec.product_name, shop_id: appUser?.shop_id, date });
+    try {
+      for (const rec of inputRows) {
+        const cashVal = Number(rec.cash) || 0;
+        const transVal = Number(rec.transfer) || 0;
+        if (!rec.product_name.trim() || (cashVal === 0 && transVal === 0)) continue;
+        
+        const { data: history } = await supabase.from('daily_records').select('accounting_amount').eq('product_name', rec.product_name).eq('shop_id', appUser?.shop_id).order('created_at', { ascending: false }).limit(1);
+        const { value: kt } = calcKT(transVal, cashVal, (history && history.length > 0) ? history[0].accounting_amount : 0);
+        const { error } = await supabase.from('daily_records').insert({ cash: cashVal, transfer: transVal, accounting_amount: kt, product_name: rec.product_name, shop_id: appUser?.shop_id, date });
+        if (error) throw error;
+      }
+      await loadTodayRows();
+      await loadMonthlyResults();
+      localStorage.removeItem(`hkd_draft_${date}_${appUser?.id}`);
+    } catch (err: any) {
+      alert("Lỗi khi lưu tất cả: " + err.message);
     }
-    await loadTodayRows();
-    await loadMonthlyResults();
-    localStorage.removeItem(`hkd_draft_${date}_${appUser?.id}`);
     setSavingAll(false);
   };
 
@@ -507,7 +513,18 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                     className="flex-1 border-2 border-gray-100 p-2 rounded-xl text-right font-bold focus:border-blue-400 outline-none"
                   />
                   {idx === adderValues.length - 1 && (
-                    <button onClick={() => setAdderValues([...adderValues, ''])} className="bg-blue-50 text-blue-600 w-10 h-10 rounded-xl font-bold text-xl">+</button>
+                    <button 
+                      onClick={() => {
+                        const nv = [...adderValues];
+                        if (nv[idx] !== '' && !nv[idx].endsWith('000')) {
+                          nv[idx] = nv[idx] + '000';
+                        }
+                        setAdderValues([...nv, '']);
+                      }} 
+                      className="bg-blue-600 text-white w-10 h-10 rounded-xl font-bold text-xl shadow-md active:scale-95"
+                    >
+                      +
+                    </button>
                   )}
                 </div>
               ))}
