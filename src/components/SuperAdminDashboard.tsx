@@ -17,6 +17,7 @@ export default function SuperAdminDashboard() {
   // Form Fields
   const [storeCode, setStoreCode] = useState(generateStoreCode());
   const [storeName, setStoreName] = useState('Cửa hàng mới');
+  const [expireDate, setExpireDate] = useState('');
   const [contactPhone, setContactPhone] = useState('09xx');
   const [autoLogoutMinutes, setAutoLogoutMinutes] = useState(60);
   
