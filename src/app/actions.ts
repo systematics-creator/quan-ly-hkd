@@ -72,3 +72,19 @@ export async function deleteUserFromShop(userId: string) {
     return { error: err.message };
   }
 }
+
+export async function deleteShopAndUsers(shopId: string) {
+  try {
+    const { data: shopUsers } = await supabaseAdmin.from('users').select('id').eq('shop_id', shopId);
+    if (shopUsers && shopUsers.length > 0) {
+      for (const u of shopUsers) {
+        await supabaseAdmin.auth.admin.deleteUser(u.id);
+      }
+    }
+    const { error } = await supabaseAdmin.from('shops').delete().eq('id', shopId);
+    if (error) return { error: error.message };
+    return { success: true };
+  } catch (err: any) {
+    return { error: err.message };
+  }
+}

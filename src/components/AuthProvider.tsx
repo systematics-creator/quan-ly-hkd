@@ -19,6 +19,7 @@ type Shop = {
   expire_at: string;
   is_active: boolean;
   contact_phone?: string;
+  auto_logout_minutes?: number;
 };
 
 type AuthContextType = {
@@ -131,6 +132,34 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
       authListener.subscription.unsubscribe();
     };
   }, [router]);
+
+  // --- INACTIVITY TIMER ---
+  useEffect(() => {
+    if (!user) return;
+
+    let timeoutId: any;
+    // Default to 1 hour (60 minutes) if not set
+    const timeoutMinutes = shop?.auto_logout_minutes || 60;
+    const timeoutMs = timeoutMinutes * 60 * 1000;
+
+    const resetTimer = () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      timeoutId = setTimeout(() => {
+        console.log("Inactivity logout triggered");
+        signOut();
+      }, timeoutMs);
+    };
+
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart'];
+    events.forEach(event => window.addEventListener(event, resetTimer));
+
+    resetTimer();
+
+    return () => {
+      if (timeoutId) clearTimeout(timeoutId);
+      events.forEach(event => window.removeEventListener(event, resetTimer));
+    };
+  }, [user, shop, router]);
 
   const signOut = async () => {
     setLoading(true);
