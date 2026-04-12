@@ -42,8 +42,11 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
 
   // Persistence: Save to localStorage
   useEffect(() => {
-    if (inputRows.length > 0 && inputRows[0].product_name !== '' || inputRows[0].cash !== 0 || inputRows[0].transfer !== 0) {
-      localStorage.setItem(`hkd_draft_${date}_${appUser?.id}`, JSON.stringify(inputRows));
+    if (inputRows.length > 0) {
+      const firstRow = inputRows[0];
+      if (firstRow.product_name !== '' || firstRow.cash !== 0 || firstRow.transfer !== 0) {
+        localStorage.setItem(`hkd_draft_${date}_${appUser?.id}`, JSON.stringify(inputRows));
+      }
     }
   }, [inputRows, date, appUser]);
 
@@ -85,9 +88,12 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
 
     // --- THUẬT TOÁN BÙ (COMPENSATION LOGIC) ---
     // Tính toán tiến độ cần thiết để đạt mục tiêu tháng
-    const [y, m] = date.split('-').map(Number);
-    const daysInMonth = new Date(y, m, 0).getDate();
-    const dayOfMonth = new Date(date).getDate();
+    const dateParts = date.split('-');
+    const y = dateParts.length > 0 ? Number(dateParts[0]) : new Date().getFullYear();
+    const m = dateParts.length > 1 ? Number(dateParts[1]) : new Date().getMonth() + 1;
+    
+    const daysInMonth = new Date(y, m, 0).getDate() || 30;
+    const dayOfMonth = new Date(date + 'T00:00:00').getDate() || 1;
     const monthlyTarget = (settings?.yearly_kt_limit || 0) / 12;
     
     // Tổng KT hiện tại trong tháng (bao gồm cả các bản ghi cũ)
@@ -284,7 +290,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
             <span>Mục tiêu: {fmt(monthlyTarget)}đ</span>
           </div>
           {/* TRẠNG THÁI BÙ */}
-          {monthTotalKT < (monthlyTarget / 30) * new Date(date).getDate() && (
+          {monthlyTarget > 0 && monthTotalKT < (monthlyTarget / 30) * (new Date(date + 'T00:00:00').getDate() || 1) && (
             <div className="mt-2 text-[8px] text-orange-400 bg-orange-400/10 px-2 py-1 rounded inline-block font-bold animate-pulse">
               ⚠️ Đang kích hoạt chế độ bù KT (do thiếu hụt tiến độ)
             </div>

@@ -1,47 +1,57 @@
-Hướng Dẫn Sử Dụng SaaS Quản Lý Hộ Kinh Doanh
-Chào mừng bạn đến với ứng dụng quản lý SaaS! Sau khi đã cấu hình xong website lên mạng, bạn cần phải thực hiện thiết lập tài khoản Quản trị đầu tiên để có thể đăng nhập. Dưới đây là quy trình cụ thể:
+HƯỚNG DẪN SỬ DỤNG HỆ THỐNG QUẢN LÝ HKD (SAAS)
+Chào mừng bạn đến với hệ thống Quản lý Hộ Kinh Doanh chuyên sâu. Đây là nền tảng giúp bạn quản lý doanh thu, theo dõi mục tiêu tài chính và tự động hóa quy trình tính toán mẫu KT (Kế toán/Kiểm tra) một cách thông minh.
 
-1. Cách Tạo Tài Khoản Super Admin Lần Đầu
-Vì đây là nền tảng quản lý bí mật cho các Shop, chức năng "Tự do đăng ký (Sign up)" ở ngoài giao diện đã bị ẩn để ngăn người lạ xâm nhập. Bạn (với tư cách là Chủ hệ thống toàn quyền) phải tự tay tạo account ở trong Database.
+1. TỔNG QUAN CÁC VAI TRÒ
+Hệ thống được thiết kế với 3 cấp độ phân quyền chính:
 
-Các bước thực hiện trên Supabase:
+Super Admin (Admin Tổng): Cấp mã cửa hàng, quản lý thời hạn sử dụng và cung cấp số điện thoại hỗ trợ kỹ thuật.
+Admin (Chủ Cửa Hàng): Thiết lập mục tiêu năm, cấu hình các dải (Range) tính toán KT và quản lý nhân sự trong cửa hàng.
+Manager/User (Nhân Viên): Thực hiện nhiệm vụ nhập liệu hàng ngày, chỉnh sửa bản ghi và xuất báo cáo Excel.
 
-Truy cập vào giao diện web của Supabase.
-Chọn dự án của bạn -> vào mục Authentication (biểu tượng hình người) -> Chọn tab Users.
-Bấm nút Add User -> Create new user.
-Nhập Email (ví dụ: admin@gmail.com) và Mật khẩu (ví dụ: 123456) -> Auto Confirm Email -> Bấm Create user.
-Nhấn copy User ID (đó là một chuỗi ký tự dài e.g., abc123xx-....).
-2. Tạo Không Gian Cho Shop (Hộ Kinh Doanh)
-Tiếp theo, tài khoản vừa tạo cần được gắn với một cái "Shop".
+2. CHỨC NĂNG NHẬP LIỆU (DAILY ENTRY)
+Đây là màn hình chính dành cho việc theo dõi doanh thu hàng ngày.
 
-Ở Supabase, vào mục Table Editor (biểu tượng bảng lưới).
-Bấm vào bảng shops -> Bấm nút Insert row.
-name: Điền tên shop (VD: Cửa Hàng Yến Sào)
-expire_at: Điền ngày hết hạn sử dụng (VD: 2027-01-01 00:00:00)
-Bấm Save.
-Quay ra màn hình chính, copy ID của cái Cửa hàng bạn vừa tạo.
-Gắn Users vào Shops & Cấp Quyền Giám Đốc (Super Admin)
+Cách nhập liệu:
+Chọn ngày: Mặc định là ngày hiện tại. Bạn có thể chọn ngày khác để nhập bù.
+Tên hàng hóa: Nhập tên sản phẩm hoặc dịch vụ.
+Tiền chuyển khoản (CK) & Tiền mặt (TM): Nhập số tiền thực tế nhận được.
+TIP
 
-Chọn tiếp bảng users (dưới mục Table Editor) -> Bấm Insert row.
-id: Dán cai UUID của Admin User mà bạn nãy vừa tạo ở mục Auth.
-shop_id: Dán cái UUID của Cửa Hàng bạn vừa tạo.
-role: Gõ vào admin (Vô cùng quan trọng để có toàn bộ quyền lực).
-email: admin@gmail.com
-Bấm Save.
-3. Bắt Đầu Đăng Nhập Và Sử Dụng Website
-Bây giờ hệ thống dữ liệu của bạn đã có cả người lẫn cửa hàng.
+Hệ thống sẽ tự động định dạng dấu phân cách nghìn (.), bạn chỉ cần nhập số.
 
-Mở trang URL Vercel của bạn lên.
-Hệ thống sẽ bật tường bảo vệ và tự động đuổi bạn ra trang Login (/login).
-Điền Email: admin@gmail.com và Mật số: 123456.
-Bấm Sign In.
-🌟 Hệ thống giao diện làm gì tiếp theo?
-Ngay sau khi bạn login, hệ thống ngầm đối chiếu xem tài khoản có gắn với Cửa Hàng nào không.
-Nó tự động chạy qua một bộ đếm: Cửa hàng này đã quá ngày hết hạn (expire_at) chưa? Cửa hàng có đang bị vô hiệu hóa (is_active = false) không? Nếu có, hệ thống lập tức đá bạn bay ra trang Access Denied (Bị Khóa).
-Nếu mọi thứ ổn, bạn sẽ được đưa vào Dashboard:
-Dành cho nhân viên (user): Chỉ nhìn thấy duy nhất Form nhập thu chi hàng ngày.
-Dành cho Giám đốc (admin) / Quản lý (manager): Sẽ thấy xuất hiện thêm cả khu vực cấu hình Doanh Thu Theo Tháng/Năm và các nút chỉnh sửa thiết lập.
-Toàn bộ con số Thu Chi sẽ được tự tính qua thuật toán kiểm duyệt an toàn trước khi đẩy vô DataBase.
-Một Số Chú Ý Cho Tương Lai:
-Để cung cấp tài khoản cho 1 cửa hàng mới, bạn chỉ việc vô Supabase nạp record cho bảng shops, users. Quá trình này sẽ vô cùng bảo mật!
-Nếu cửa hàng nào đến tháng mà KHÔNG ĐÓNG TIỀN, bạn chỉ việc nhấn đổi ngày expire_at thành hôm qua. App của họ tự khắc sẽ bị khóa!
+Lưu dữ liệu:
+Nhấn nút "Lưu" ở từng dòng để lưu lẻ.
+Nhấn "LƯU TẤT CẢ" nếu bạn nhập đồng thời nhiều dòng.
+Tính năng Nháp tự động: Nếu bạn đang nhập mà lỡ tay đóng trình duyệt hoặc chuyển sang ứng dụng khác, dữ liệu sẽ được tự động lưu lại. Khi mở lại trang, bạn sẽ thấy các dòng mình đang nhập dở.
+
+3. Cơ Chế Tính Toán KT Tự Động & Chế Độ "BÙ"
+Hệ thống sử dụng thuật toán thông minh để tạo ra mẫu KT phù hợp với cài đặt của chủ shop.
+
+Dải A & Dải B: Tùy vào số tiền Chuyển khoản (CK) lớn hay nhỏ hơn 1.5M, hệ thống sẽ chọn một giá trị ngẫu nhiên trong dải A hoặc dải B đã cài đặt.
+Chế độ Bù (Compensation): Nếu trong tháng có những ngày bạn nghỉ (nhập KT = 0) hoặc sản lượng thấp, hệ thống sẽ nhận diện sự thiếu hụt so với mục tiêu.
+Khi thấy dòng chữ ⚠️ Đang kích hoạt chế độ bù KT, các con số KT tự động tạo ra sẽ có xu hướng tiến về mức tối đa (Max) của dải để giúp bạn sớm đạt mục tiêu tháng.
+
+4. QUẢN LÝ KẾT QUẢ THÁNG
+Bảng bên dưới màn hình hiển thị toàn bộ lịch sử trong tháng đã chọn.
+
+Chỉnh sửa bản ghi: Nhấn biểu tượng ✏️. Bạn có thể sửa mọi thông tin, bao gồm cả việc tự nhập số KT bằng tay (ví dụ nhập 0 khi nghỉ làm).
+Xóa bản ghi: Tích chọn các dòng cần xóa và nhấn nút XÓA màu đỏ.
+Xuất Excel: Nhấn nút 📥 để tải về file báo cáo đầy đủ của tháng hiện tại, sẵn sàng cho công tác kế toán.
+
+5. THIẾT LẬP CỬA HÀNG (DÀNH CHO ADMIN)
+Truy cập phần "Cấu hình & Nhân sự" để tối ưu hệ thống:
+
+Thiết lập mục tiêu:
+Mục tiêu năm: Tổng số tiền KT bạn muốn đạt được trong năm. Hệ thống sẽ tự chia 12 để ra mục tiêu tháng.
+Cấu hình Dải A/B: Điều chỉnh mức Min/Max cho từng dải để phù hợp với quy mô cửa hàng của bạn.
+Quản lý nhân sự:
+Admin có thể tạo thêm tài khoản định danh cho nhân viên.
+Tính năng Chỉnh sửa (✏️) cho phép Admin đổi mật khẩu hoặc thay đổi quyền hạn của nhân viên một cách nhanh chóng.
+Tính năng Xóa (🗑️) để thu hồi quyền truy cập của nhân sự đã nghỉ việc.
+
+6. HỖ TRỢ KỸ THUẬT
+Dưới chân trang web (Footer) luôn hiển thị số điện thoại liên hệ hỗ trợ. Nếu gặp sự cố về tài khoản hoặc lỗi kỹ thuật, bạn hãy liên hệ trực tiếp số điện thoại này để được xử lý nhanh nhất.
+
+NOTE
+
+Hệ thống được tối ưu hóa cho cả thiết bị di động. Bạn có thể nhập liệu mọi lúc, mọi nơi ngay trên điện thoại của mình.
