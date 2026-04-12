@@ -164,8 +164,6 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
              </div>
           </div>
 
-          </div>
-          
           <button type="submit" className="w-full bg-blue-600 text-white py-2 rounded-md font-bold text-sm active:scale-95 shadow-sm">
             Cập nhật cấu hình
           </button>
@@ -207,6 +205,7 @@ export default function ShopAdminSettings({ settings, onSettingsUpdated }: { set
               <tr className="text-[9px] uppercase font-bold text-gray-400">
                 <th className="p-2">Email</th>
                 <th className="p-2 text-center">Vai trò</th>
+                <th className="p-2 text-right">Thao tác</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-100">
