@@ -8,14 +8,16 @@ import * as XLSX from 'xlsx';
 type Row = {
   id?: string;
   product_name: string;
-  cash: number;
-  transfer: number;
+  cash: number | string;
+  transfer: number | string;
   accounting_amount: number;
   isNew?: boolean;
 };
 
-const fmt = (val: number) =>
-  new Intl.NumberFormat('vi-VN').format(Math.round(val || 0));
+const fmt = (val: number | string) => {
+  const n = typeof val === 'number' ? val : Number(val) || 0;
+  return new Intl.NumberFormat('vi-VN').format(Math.round(n));
+};
 
 export default function DailyEntryForm({ settings }: { settings: any }) {
   const { appUser } = useAuth();
@@ -154,12 +156,15 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
 
   const doSave = async (index: number) => {
     const rec = inputRows[index];
-    if (!rec.product_name.trim() || (rec.cash === 0 && rec.transfer === 0)) { alert('Nhập dữ liệu!'); return; }
+    const cashVal = Number(rec.cash) || 0;
+    const transVal = Number(rec.transfer) || 0;
+
+    if (!rec.product_name.trim() || (cashVal === 0 && transVal === 0)) { alert('Nhập dữ liệu!'); return; }
     setSaving(index);
     const { data: history } = await supabase.from('daily_records').select('accounting_amount').eq('product_name', rec.product_name).eq('shop_id', appUser?.shop_id).order('created_at', { ascending: false }).limit(1);
     const lastKT = (history && history.length > 0) ? history[0].accounting_amount : 0;
-    const { value: kt } = calcKT(rec.transfer, rec.cash, lastKT);
-    const { data: ins, error } = await supabase.from('daily_records').insert({ cash: rec.cash, transfer: rec.transfer, accounting_amount: kt, product_name: rec.product_name, shop_id: appUser?.shop_id, date }).select().single();
+    const { value: kt } = calcKT(transVal, cashVal, lastKT);
+    const { data: ins, error } = await supabase.from('daily_records').insert({ cash: cashVal, transfer: transVal, accounting_amount: kt, product_name: rec.product_name, shop_id: appUser?.shop_id, date }).select().single();
     if (!error) {
       const nr = [...inputRows];
       nr[index] = { product_name: rec.product_name, cash: 0, transfer: 0, accounting_amount: ins.accounting_amount, isNew: true };
@@ -174,10 +179,13 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   const doSaveAll = async () => {
     setSavingAll(true);
     for (const rec of inputRows) {
-      if (!rec.product_name.trim() || (rec.cash === 0 && rec.transfer === 0)) continue;
+      const cashVal = Number(rec.cash) || 0;
+      const transVal = Number(rec.transfer) || 0;
+      if (!rec.product_name.trim() || (cashVal === 0 && transVal === 0)) continue;
+      
       const { data: history } = await supabase.from('daily_records').select('accounting_amount').eq('product_name', rec.product_name).eq('shop_id', appUser?.shop_id).order('created_at', { ascending: false }).limit(1);
-      const { value: kt } = calcKT(rec.transfer, rec.cash, (history && history.length > 0) ? history[0].accounting_amount : 0);
-      await supabase.from('daily_records').insert({ cash: rec.cash, transfer: rec.transfer, accounting_amount: kt, product_name: rec.product_name, shop_id: appUser?.shop_id, date });
+      const { value: kt } = calcKT(transVal, cashVal, (history && history.length > 0) ? history[0].accounting_amount : 0);
+      await supabase.from('daily_records').insert({ cash: cashVal, transfer: transVal, accounting_amount: kt, product_name: rec.product_name, shop_id: appUser?.shop_id, date });
     }
     await loadTodayRows();
     await loadMonthlyResults();
