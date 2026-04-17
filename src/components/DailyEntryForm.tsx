@@ -378,10 +378,12 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                       <input 
                         type="text" 
                         value={fmt(rec.transfer)} 
-                        onFocus={e => rec.transfer === 0 && updateRow(i, 'transfer', '')}
+                        readOnly={!!(rec.transfer_items && rec.transfer_items.length > 0)}
+                        onClick={() => rec.transfer_items && rec.transfer_items.length > 0 && openAdder(i)}
+                        onFocus={e => rec.transfer === 0 && !rec.transfer_items && updateRow(i, 'transfer', '')}
                         onBlur={e => rec.transfer === 0 && updateRow(i, 'transfer', 0)}
                         onChange={e => updateRow(i, 'transfer', parseMoney(e.target.value))} 
-                        className="w-full border p-2 pt-3 rounded-lg text-right font-bold text-sm" 
+                        className={`w-full border p-2 pt-3 rounded-lg text-right font-bold text-sm ${rec.transfer_items?.length ? 'cursor-pointer bg-blue-50 border-blue-200 text-blue-700' : ''}`} 
                       />
                       <button 
                         onClick={() => openAdder(i)} 
