@@ -255,7 +255,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   };
 
   const fixInvalidKT = async () => {
-    if (!isAdmin || !confirm("Hệ thống sẽ kiểm tra và cập nhật lại các bản ghi có KT <= CK. Tiếp tục?")) return;
+    if (!isAdmin || !confirm("Hệ thống sẽ kiểm tra và cập nhật lại các bản ghi để đảm bảo quy tắc KT > CK. Tiếp tục?")) return;
     
     let fixCount = 0;
     const toFix = monthlyRecords.filter(r => r.accounting_amount > 0 && r.transfer > 0 && Number(r.accounting_amount) <= Number(r.transfer));
