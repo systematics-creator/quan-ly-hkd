@@ -13,6 +13,7 @@ type Row = {
   accounting_amount: number;
   isNew?: boolean;
   transfer_count?: number;
+  transfer_items?: string[];
 };
 
 const fmt = (val: number | string) => {
@@ -146,7 +147,18 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     };
 
     const finalResult = (transfer === 0 && cash === 0) ? 0 : roundKT(result);
-    return { value: finalResult, isCompensated: bias > 0.1 };
+    
+    // Đảm bảo KT > CK (transfer) theo yêu cầu mới
+    let adjustedFinal = finalResult;
+    if (adjustedFinal > 0 && adjustedFinal <= transfer) {
+      let tempResult = result;
+      while (roundKT(tempResult) <= transfer) {
+        tempResult += 1000;
+      }
+      adjustedFinal = roundKT(tempResult);
+    }
+
+    return { value: adjustedFinal, isCompensated: bias > 0.1 };
   };
 
   const exportToExcel = () => {
@@ -242,6 +254,31 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     }
   };
 
+  const fixInvalidKT = async () => {
+    if (!isAdmin || !confirm("Hệ thống sẽ kiểm tra và cập nhật lại các bản ghi có KT <= CK. Tiếp tục?")) return;
+    
+    let fixCount = 0;
+    const toFix = monthlyRecords.filter(r => r.accounting_amount > 0 && r.transfer > 0 && Number(r.accounting_amount) <= Number(r.transfer));
+    
+    if (toFix.length === 0) {
+      alert("Không có bản ghi nào vi phạm điều kiện KT > CK.");
+      return;
+    }
+
+    setSavingAll(true);
+    for (const r of toFix) {
+      const { value: newKT } = calcKT(Number(r.transfer), Number(r.cash));
+      const { error } = await supabase.from('daily_records').update({ accounting_amount: newKT }).eq('id', r.id);
+      if (!error) fixCount++;
+    }
+    setSavingAll(false);
+    
+    if (fixCount > 0) {
+      alert(`Đã cập nhật ${fixCount} bản ghi!`);
+      await loadMonthlyResults();
+    }
+  };
+
   const updateRow = (index: number, field: keyof Row, val: any) => {
     const nr = [...inputRows]; 
     (nr[index] as any)[field] = val; 
@@ -260,7 +297,12 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
 
   const openAdder = (index: number) => {
     setAdderRowIndex(index);
-    setAdderValues(['']);
+    const row = inputRows[index];
+    if (row.transfer_items && row.transfer_items.length > 0) {
+      setAdderValues(row.transfer_items);
+    } else {
+      setAdderValues(['']);
+    }
   };
 
   const closeAdder = () => {
@@ -270,17 +312,24 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   const handleSumAdder = () => {
     if (adderRowIndex === null) return;
     
+    const items = adderValues.filter(v => v.trim() !== '');
     // Auto-append 000 to all shorthand values before summing
-    const total = adderValues.reduce((s, v) => {
+    const total = items.reduce((s, v) => {
       let num = parseMoney(v) || 0;
       if (num > 0 && num < 10000) num = num * 1000;
       return s + num;
     }, 0);
     
-    const count = adderValues.filter(v => parseMoney(v) > 0).length;
+    const count = items.length;
     
-    updateRow(adderRowIndex, 'transfer', total);
-    updateRow(adderRowIndex, 'transfer_count', count);
+    const nr = [...inputRows];
+    nr[adderRowIndex] = { 
+      ...nr[adderRowIndex], 
+      transfer: total, 
+      transfer_count: count,
+      transfer_items: items.length > 0 ? items : undefined
+    };
+    setInputRows(nr);
     closeAdder();
   };
 
@@ -383,6 +432,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
               <div className="font-black text-green-400 text-2xl drop-shadow-md">{fmt(monthTotalKT)}đ</div>
             </div>
             <div className="flex gap-2">
+              {isAdmin && <button onClick={fixInvalidKT} className="bg-orange-500/20 hover:bg-orange-500/40 text-orange-400 border border-orange-500/30 px-2 py-1 text-[8px] font-bold rounded flex items-center gap-1 transition-colors"><span>🛠️</span> FIX KT</button>}
               {selectedIds.length > 0 && <button onClick={doDeleteSelection} className="bg-red-500 text-white px-3 py-1 text-[10px] font-bold rounded shadow animate-pulse">XÓA ({selectedIds.length})</button>}
               <button onClick={exportToExcel} className="bg-white/10 p-2 rounded-lg">📥</button>
             </div>
@@ -495,7 +545,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                       </td>
                     ) : (
                       <>
-                        <td className="px-1 py-2 text-gray-400 text-[9px]">
+                        <td className="px-1 py-2 text-sky-500 font-bold text-[9px]">
                           {(() => {
                             const d = new Date(r.date + 'T00:00:00');
                             return `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}/${d.getFullYear()}`;
@@ -534,13 +584,13 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
                   <input 
                     type="text" 
                     autoFocus={idx === adderValues.length - 1}
-                    value={fmt(val)} 
+                    value={val === '' ? '' : fmt(val)} 
                     onChange={e => {
                       const nv = [...adderValues];
-                      nv[idx] = String(parseMoney(e.target.value));
+                      nv[idx] = e.target.value.replace(/[^0-9]/g, '');
                       setAdderValues(nv);
                     }}
-                    placeholder="Nhập số tiền..."
+                    placeholder="Số tiền..."
                     className="flex-1 border-2 border-gray-100 p-2 rounded-xl text-right font-bold focus:border-blue-400 outline-none"
                   />
                   {idx === adderValues.length - 1 && (
