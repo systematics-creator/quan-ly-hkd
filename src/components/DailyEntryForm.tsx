@@ -97,8 +97,9 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   const getMinValidKT = (transfer: number, cash: number) => {
     if (transfer === 0 && cash === 0) return 0;
     if (transfer === 0) return 0; 
-    let temp = transfer;
-    while (roundKT(temp) <= transfer) {
+    const threshold = transfer + 120000;
+    let temp = threshold;
+    while (roundKT(temp) <= threshold) {
       temp += 1000;
     }
     return roundKT(temp);
@@ -139,7 +140,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
         if (transfer === 0) {
            result = 0; // Hãm phanh: Về 0 nếu không có CK
         } else {
-           result = transfer; // Ép sát về CK
+           result = transfer + 120000; // Ép sát về CK + 120k
         }
     } else {
         const rand = weightedRandom();
@@ -155,9 +156,10 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     const finalResult = (transfer === 0 && cash === 0) ? 0 : roundKT(result);
     
     let adjustedFinal = finalResult;
-    if (transfer > 0 || result > 0) {
-      let tempResult = Math.max(result, transfer);
-      while (roundKT(tempResult) <= transfer) {
+    const threshold = transfer > 0 ? transfer + 120000 : 0;
+    if (threshold > 0 || result > 0) {
+      let tempResult = Math.max(result, threshold);
+      while (roundKT(tempResult) <= threshold) {
         tempResult += 1000;
       }
       adjustedFinal = roundKT(tempResult);
@@ -260,13 +262,13 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   };
 
   const fixInvalidKT = async () => {
-    if (!isAdmin || !confirm("Hệ thống sẽ kiểm tra và cập nhật lại các bản ghi để đảm bảo quy tắc KT > CK. Tiếp tục?")) return;
+    if (!isAdmin || !confirm("Hệ thống sẽ kiểm tra và cập nhật lại các bản ghi để đảm bảo quy tắc KT > CK + 120.000đ. Tiếp tục?")) return;
     
     let fixCount = 0;
-    const toFix = monthlyRecords.filter(r => r.accounting_amount > 0 && r.transfer > 0 && Number(r.accounting_amount) <= Number(r.transfer));
+    const toFix = monthlyRecords.filter(r => r.accounting_amount > 0 && r.transfer > 0 && Number(r.accounting_amount) <= (Number(r.transfer) + 120000));
     
     if (toFix.length === 0) {
-      alert("Không có bản ghi nào vi phạm điều kiện KT > CK.");
+      alert("Không có bản ghi nào vi phạm điều kiện KT > CK + 120.000đ.");
       return;
     }
 
@@ -293,7 +295,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       alert("Tổng KT hiện tại chưa vượt mục tiêu, không cần tối ưu giảm!");
       return;
     }
-    if (!confirm("Hệ thống sẽ ĐIỀU CHỈNH GIẢM KT của tất cả các ngày trong tháng về mức sát Mục Tiêu nhất (vẫn giữ đúng luật KT > CK). Tiếp tục?")) return;
+    if (!confirm("Hệ thống sẽ ĐIỀU CHỈNH GIẢM KT của tất cả các ngày trong tháng về mức sát Mục Tiêu nhất (vẫn giữ đúng luật KT > CK + 120.000đ). Tiếp tục?")) return;
 
     setSavingAll(true);
     let excess = monthTotalKT - monthlyTarget;
@@ -322,7 +324,9 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
            newKT = roundKT(newKT);
         }
         
-        if (trans > 0 && newKT <= trans) {
+        // Ensure newKT is strictly > transfer + 120k (if transfer > 0)
+        const threshold = trans > 0 ? trans + 120000 : 0;
+        if (threshold > 0 && newKT <= threshold) {
             newKT = minKT;
         }
 
