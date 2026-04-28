@@ -97,9 +97,9 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   const getMinValidKT = (transfer: number, cash: number) => {
     if (transfer === 0 && cash === 0) return 0;
     if (transfer === 0) return 0; 
-    const threshold = transfer + 120000;
+    const threshold = transfer + 90000;
     let temp = threshold;
-    while (roundKT(temp) <= threshold) {
+    while (roundKT(temp) < threshold) {
       temp += 1000;
     }
     return roundKT(temp);
@@ -140,7 +140,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
         if (transfer === 0) {
            result = 0; // Hãm phanh: Về 0 nếu không có CK
         } else {
-           result = transfer + 120000; // Ép sát về CK + 120k
+           result = transfer + 90000 + Math.floor(Math.random() * 50000); // Ép vào khoảng 90k-140k
         }
     } else {
         const rand = weightedRandom();
@@ -156,13 +156,17 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     const finalResult = (transfer === 0 && cash === 0) ? 0 : roundKT(result);
     
     let adjustedFinal = finalResult;
-    const threshold = transfer > 0 ? transfer + 120000 : 0;
-    if (threshold > 0 || result > 0) {
-      let tempResult = Math.max(result, threshold);
-      while (roundKT(tempResult) <= threshold) {
-        tempResult += 1000;
+    if (transfer > 0) {
+      const minKT = transfer + 90000;
+      const maxKT = transfer + 140000;
+      if (adjustedFinal < minKT || adjustedFinal > maxKT) {
+        let tempResult = minKT + Math.floor(Math.random() * (maxKT - minKT));
+        adjustedFinal = roundKT(tempResult);
+        while (adjustedFinal < minKT) {
+          tempResult += 1000;
+          adjustedFinal = roundKT(tempResult);
+        }
       }
-      adjustedFinal = roundKT(tempResult);
     }
 
     return { value: adjustedFinal, isCompensated: bias > 0.1 };
@@ -262,13 +266,25 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
   };
 
   const fixInvalidKT = async () => {
-    if (!isAdmin || !confirm("Hệ thống sẽ kiểm tra và cập nhật lại các bản ghi để đảm bảo quy tắc KT > CK + 120.000đ. Tiếp tục?")) return;
+    if (!isAdmin || !confirm("Hệ thống sẽ kiểm tra: 1. CK=0, TM=0 => KT=0. 2. CK>0 => KT thuộc [CK+90k, CK+140k]. Tiếp tục?")) return;
     
     let fixCount = 0;
-    const toFix = monthlyRecords.filter(r => r.accounting_amount > 0 && r.transfer > 0 && Number(r.accounting_amount) <= (Number(r.transfer) + 120000));
+    const toFix = monthlyRecords.filter(r => {
+        const kt = Number(r.accounting_amount) || 0;
+        const ck = Number(r.transfer) || 0;
+        const cash = Number(r.cash) || 0;
+        
+        // Nguyên tắc 1: Ngày nghỉ (CK=0, TM=0) thì KT bắt buộc = 0
+        if (ck === 0 && cash === 0) return kt > 0;
+        
+        // Nguyên tắc 2: Có CK thì KT bắt buộc nằm trong [CK+90k, CK+140k]
+        if (ck > 0) return kt < ck + 90000 || kt > ck + 140000;
+        
+        return false;
+    });
     
     if (toFix.length === 0) {
-      alert("Không có bản ghi nào vi phạm điều kiện KT > CK + 120.000đ.");
+      alert("Tuyệt vời! Không có bản ghi nào vi phạm các nguyên tắc KT.");
       return;
     }
 
@@ -295,7 +311,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
       alert("Tổng KT hiện tại chưa vượt mục tiêu, không cần tối ưu giảm!");
       return;
     }
-    if (!confirm("Hệ thống sẽ ĐIỀU CHỈNH GIẢM KT của tất cả các ngày trong tháng về mức sát Mục Tiêu nhất (vẫn giữ đúng luật KT > CK + 120.000đ). Tiếp tục?")) return;
+    if (!confirm("Hệ thống sẽ ĐIỀU CHỈNH GIẢM KT của tất cả các ngày trong tháng về mức sát Mục Tiêu nhất (vẫn giữ đúng luật KT thuộc [CK + 90k, CK + 140k]). Tiếp tục?")) return;
 
     setSavingAll(true);
     let excess = monthTotalKT - monthlyTarget;
@@ -324,9 +340,9 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
            newKT = roundKT(newKT);
         }
         
-        // Ensure newKT is strictly > transfer + 120k (if transfer > 0)
-        const threshold = trans > 0 ? trans + 120000 : 0;
-        if (threshold > 0 && newKT <= threshold) {
+        // Ensure newKT is strictly >= transfer + 90k (if transfer > 0)
+        const threshold = trans > 0 ? trans + 90000 : 0;
+        if (threshold > 0 && newKT < threshold) {
             newKT = minKT;
         }
 

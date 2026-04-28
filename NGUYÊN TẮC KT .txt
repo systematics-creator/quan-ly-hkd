@@ -1,0 +1,11 @@
+KT luôn nằm trong khoảng [CK + 90.000đ đến CK + 140.000đ].
+
+Sự thay đổi này áp dụng trên toàn bộ các tính năng:
+
+Nhập liệu hàng ngày: Khi bạn nhập bất kỳ số CK nào > 0, hệ thống sẽ tự động bỏ qua Dải A/B thông thường, và lấy ngay một số ngẫu nhiên nằm vừa vặn trong khoảng CK + 90k đến CK + 140k (và làm tròn đuôi 0,5,6,8,9). Với khách trả tiền mặt (CK=0) thì hệ thống mới dùng lại Dải A/B.
+
+Chế độ Phanh Hãm: Khi vượt mục tiêu tháng, hệ thống cũng chỉ dao động trong khoảng nhỏ xíu này để đảm bảo quỹ KT không bị đội lên vô cớ.
+
+Nút "🛠️ FIX KT": Khi quét lại lịch sử, nút này sẽ lôi ra toàn bộ các bản ghi nào đang có KT nằm ngoài khoảng [CK + 90k, CK + 140k] (có thể do nhập từ trước đó) và nắn lại vào đúng quỹ đạo này.
+
+Nút "🎯 TỐI ƯU MỤC TIÊU": Quá trình gọt giảm mục tiêu lố cũng sẽ dừng lại ngay ở ranh giới tối thiểu là CK + 90.000đ.
