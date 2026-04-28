@@ -81,14 +81,35 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     if (!error && data) setMonthlyRecords(data);
   };
 
+  const roundKT = (val: number) => {
+    let base = Math.floor(val / 1000) * 1000;
+    let thousands = Math.floor(base / 1000) % 10;
+    const allowed = [0, 5, 6, 8, 9];
+    if (!allowed.includes(thousands)) {
+      const nearest = allowed.reduce((prev, curr) => 
+        Math.abs(curr - thousands) < Math.abs(prev - thousands) ? curr : prev
+      );
+      base = Math.floor(base / 10000) * 10000 + (nearest * 1000);
+    }
+    return base;
+  };
+
+  const getMinValidKT = (transfer: number, cash: number) => {
+    if (transfer === 0 && cash === 0) return 0;
+    if (transfer === 0) return 0; 
+    let temp = transfer;
+    while (roundKT(temp) <= transfer) {
+      temp += 1000;
+    }
+    return roundKT(temp);
+  };
+
   const calcKT = (transfer: number, cash: number, prevKT?: number) => {
     const raMin = settings?.range_a_min || 1800000;
     const raMax = settings?.range_a_max || 2300000;
     const rbMin = settings?.range_b_min || 2300000;
     const rbMax = settings?.range_b_max || 3400000;
 
-    // --- THUẬT TOÁN BÙ (COMPENSATION LOGIC) ---
-    // Tính toán tiến độ cần thiết để đạt mục tiêu tháng
     const dateParts = date.split('-');
     const y = dateParts.length > 0 ? Number(dateParts[0]) : new Date().getFullYear();
     const m = dateParts.length > 1 ? Number(dateParts[1]) : new Date().getMonth() + 1;
@@ -97,61 +118,45 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     const dayOfMonth = new Date(date + 'T00:00:00').getDate() || 1;
     const monthlyTarget = (settings?.yearly_kt_limit || 0) / 12;
     
-    // Tổng KT hiện tại trong tháng (bao gồm cả các bản ghi cũ)
     const currentMonthTotal = monthlyRecords.reduce((s, r) => s + (r.accounting_amount || 0), 0);
-    
-    // Tiến độ lý tưởng đến ngày hiện tại
     const idealProgress = (monthlyTarget / daysInMonth) * dayOfMonth;
     
-    // Độ lệch (Gap): Nếu thiếu hụt so với tiến độ lý tưởng (do nghỉ làm KT=0), bias sẽ tăng lên
     const gap = idealProgress - currentMonthTotal;
-    
-    // Tỉ lệ bù: từ 0 đến 1. Nếu hụt nhiều, bias tiến gần về 1 (lấy giá trị Max của dải)
-    // Chia cho 1/3 mục tiêu tháng để làm mượt tỉ lệ bù
     const bias = gap > 0 ? Math.min(gap / (monthlyTarget / 3), 1) : 0;
+    
+    const isOverTarget = currentMonthTotal > monthlyTarget;
+    const isOverProgress = (currentMonthTotal - idealProgress) > (monthlyTarget * 0.1);
 
-    // Tạo số ngẫu nhiên có trọng số (biasing towards Max if lagging)
     const weightedRandom = () => {
       const r = Math.random();
-      // Nếu bias = 1, kết quả luôn là 1 (Max). Nếu bias = 0, kết quả là ngẫu nhiên đều 0-1.
       return r * (1 - bias) + bias;
     };
 
     let result = 0;
-    const rand = weightedRandom();
     
-    if (transfer < 1500000) {
-      const delta = Math.max(0, raMax - raMin);
-      result = raMin + Math.floor(rand * delta);
+    // CHẾ ĐỘ PHANH TỰ ĐỘNG
+    if (isOverTarget || isOverProgress) {
+        if (transfer === 0) {
+           result = 0; // Hãm phanh: Về 0 nếu không có CK
+        } else {
+           result = transfer; // Ép sát về CK
+        }
     } else {
-      const delta = Math.max(0, rbMax - rbMin);
-      result = rbMin + Math.floor(rand * delta);
+        const rand = weightedRandom();
+        if (transfer < 1500000) {
+          const delta = Math.max(0, raMax - raMin);
+          result = raMin + Math.floor(rand * delta);
+        } else {
+          const delta = Math.max(0, rbMax - rbMin);
+          result = rbMin + Math.floor(rand * delta);
+        }
     }
-
-    // Áp dụng quy tắc làm tròn đặc biệt theo yêu cầu:
-    // Hàng đơn vị, chục, trăm = 0. Hàng ngàn là 0, 5, 6, 8, 9.
-    const roundKT = (val: number) => {
-      let base = Math.floor(val / 1000) * 1000;
-      let thousands = Math.floor(base / 1000) % 10;
-      const allowed = [0, 5, 6, 8, 9];
-      
-      if (!allowed.includes(thousands)) {
-        // Tìm số gần nhất trong danh sách cho phép
-        const nearest = allowed.reduce((prev, curr) => 
-          Math.abs(curr - thousands) < Math.abs(prev - thousands) ? curr : prev
-        );
-        // Thay thế số hàng ngàn
-        base = Math.floor(base / 10000) * 10000 + (nearest * 1000);
-      }
-      return base;
-    };
 
     const finalResult = (transfer === 0 && cash === 0) ? 0 : roundKT(result);
     
-    // Đảm bảo KT > CK (transfer) theo yêu cầu mới
     let adjustedFinal = finalResult;
-    if (adjustedFinal > 0 && adjustedFinal <= transfer) {
-      let tempResult = result;
+    if (transfer > 0 || result > 0) {
+      let tempResult = Math.max(result, transfer);
       while (roundKT(tempResult) <= transfer) {
         tempResult += 1000;
       }
@@ -276,6 +281,67 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
     if (fixCount > 0) {
       alert(`Đã cập nhật ${fixCount} bản ghi!`);
       await loadMonthlyResults();
+    }
+  };
+
+  const fixOverTarget = async () => {
+    if (!isAdmin) return;
+    const monthlyTarget = (settings?.yearly_kt_limit || 0) / 12;
+    const monthTotalKT = monthlyRecords.reduce((s, r) => s + (r.accounting_amount || 0), 0);
+    
+    if (monthTotalKT <= monthlyTarget) {
+      alert("Tổng KT hiện tại chưa vượt mục tiêu, không cần tối ưu giảm!");
+      return;
+    }
+    if (!confirm("Hệ thống sẽ ĐIỀU CHỈNH GIẢM KT của tất cả các ngày trong tháng về mức sát Mục Tiêu nhất (vẫn giữ đúng luật KT > CK). Tiếp tục?")) return;
+
+    setSavingAll(true);
+    let excess = monthTotalKT - monthlyTarget;
+    let fixCount = 0;
+
+    const workingRecords = monthlyRecords.map(r => ({...r}));
+    workingRecords.sort((a, b) => b.accounting_amount - a.accounting_amount);
+
+    for (const r of workingRecords) {
+      if (excess <= 0) break;
+      
+      const currentKT = Number(r.accounting_amount) || 0;
+      const trans = Number(r.transfer) || 0;
+      const cash = Number(r.cash) || 0;
+      const minKT = getMinValidKT(trans, cash);
+
+      if (currentKT > minKT) {
+        let maxCanReduce = currentKT - minKT;
+        let reduceAmount = Math.min(excess, maxCanReduce);
+        
+        let targetNewKT = currentKT - reduceAmount;
+        let newKT = roundKT(targetNewKT);
+        
+        while (newKT < minKT) {
+           newKT += 1000;
+           newKT = roundKT(newKT);
+        }
+        
+        if (trans > 0 && newKT <= trans) {
+            newKT = minKT;
+        }
+
+        const actualReduced = currentKT - newKT;
+        
+        if (actualReduced > 0) {
+           excess -= actualReduced;
+           const { error } = await supabase.from('daily_records').update({ accounting_amount: newKT }).eq('id', r.id);
+           if (!error) fixCount++;
+        }
+      }
+    }
+
+    setSavingAll(false);
+    if (fixCount > 0) {
+      alert(`Đã tối ưu giảm KT cho ${fixCount} bản ghi! Tổng KT mới sẽ gần sát với mục tiêu.`);
+      await loadMonthlyResults();
+    } else {
+      alert("Không thể giảm thêm được nữa vì các bản ghi đều đã ở mức tối thiểu (KT sát CK).");
     }
   };
 
@@ -434,6 +500,7 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
               <div className="font-black text-green-400 text-2xl drop-shadow-md">{fmt(monthTotalKT)}đ</div>
             </div>
             <div className="flex gap-2">
+              {isAdmin && <button onClick={fixOverTarget} className="bg-purple-500/20 hover:bg-purple-500/40 text-purple-400 border border-purple-500/30 px-2 py-1 text-[8px] font-bold rounded flex items-center gap-1 transition-colors"><span>🎯</span> TỐI ƯU MỤC TIÊU</button>}
               {isAdmin && <button onClick={fixInvalidKT} className="bg-orange-500/20 hover:bg-orange-500/40 text-orange-400 border border-orange-500/30 px-2 py-1 text-[8px] font-bold rounded flex items-center gap-1 transition-colors"><span>🛠️</span> FIX KT</button>}
               {selectedIds.length > 0 && <button onClick={doDeleteSelection} className="bg-red-500 text-white px-3 py-1 text-[10px] font-bold rounded shadow animate-pulse">XÓA ({selectedIds.length})</button>}
               <button onClick={exportToExcel} className="bg-white/10 p-2 rounded-lg">📥</button>
@@ -444,8 +511,13 @@ export default function DailyEntryForm({ settings }: { settings: any }) {
             <span>Tiến độ: {progressPct.toFixed(1)}%</span>
             <span>Mục tiêu: {fmt(monthlyTarget)}đ</span>
           </div>
-          {/* TRẠNG THÁI BÙ - Chỉ hiện khi có ít nhất 1 bản ghi KT=0 trong tháng */}
-          {monthlyTarget > 0 && monthlyRecords.some(r => r.accounting_amount === 0) && (
+          {/* TRẠNG THÁI BÙ/PHANH */}
+          {monthlyTarget > 0 && monthTotalKT > monthlyTarget && (
+            <div className="mt-2 text-[8px] text-red-400 bg-red-400/10 px-2 py-1 rounded inline-block font-bold animate-pulse">
+              🛑 Đang kích hoạt chế độ PHANH HÃM (Do đã vượt mục tiêu tháng)
+            </div>
+          )}
+          {monthlyTarget > 0 && monthTotalKT <= monthlyTarget && monthlyRecords.some(r => r.accounting_amount === 0) && (
             <div className="mt-2 text-[8px] text-orange-400 bg-orange-400/10 px-2 py-1 rounded inline-block font-bold animate-pulse">
               ⚠️ Đang kích hoạt chế độ bù KT (do có ngày nghỉ/KT=0)
             </div>
